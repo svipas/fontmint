@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fontTools.ttLib import TTFont
 
-from .common import FontmintError, get_name
+from .common import FontmintError, get_name, text
 
 WEIGHT_NAMES = {
     100: "Thin", 200: "ExtraLight", 300: "Light", 400: "Regular", 500: "Medium",
@@ -26,6 +26,10 @@ WINDOWS_FAMILY_LIMIT = 31  # characters in name ID 1 that Windows apps reliably 
 # plus the ones Windows forbids in file and folder names.
 FORBIDDEN_CHARS = set("[](){}<>/%") | set('\\:*?"|')
 LINKED_WORDS = ("Regular", "Bold", "Italic", "Oblique")  # the style-linking part of a style
+UNDECODABLE = "\ufffd"  # in text read from a damaged name record; such a record is left as it is
+STYLE_PREFIXES = ("Semi", "Demi", "Extra", "Ultra")  # "Extra Bold" is one style word, not Bold
+# Name IDs that set_static_names writes; every other version of them (localized, Mac) is removed.
+STATIC_NAME_IDS = {1, 2, 3, 4, 6, 16, 17, 18, 21, 22, 25}
 
 
 def check_name(value: str, what: str) -> None:
@@ -40,7 +44,8 @@ def check_name(value: str, what: str) -> None:
 
 def check_ps_length(name: str) -> str:
     if len(name) > 63:
-        raise FontmintError(f"PostScript name '{name}' is longer than 63 characters; use a shorter --name")
+        raise FontmintError(f"PostScript name '{name}' is longer than 63 characters; use a shorter --name "
+                            "or --style-name")
     return name
 
 
@@ -63,26 +68,28 @@ def rename_family(font: TTFont, old: str, new: str) -> list[str]:
     old_ps, new_ps = old.replace(" ", ""), new.replace(" ", "")
     old_ps_name = get_name(font, 6)
     name = font["name"]
+    if old != new and not any(old in text(r) for r in name.names if r.nameID in (1, 16)):
+        raise FontmintError("can't rename: the font doesn't state its family name (name ID 1 or 16)")
     name.names = [r for r in name.names if r.nameID not in LOCALIZED_FAMILY_IDS or _is_english(r)]
     for rec in name.names:
         if rec.nameID not in FAMILY_NAME_IDS and rec.nameID < 256:
             continue
-        s = rec.toUnicode()
+        s = text(rec)
         # PostScript-style names get the space-less family ("Inter-Medium" →
-        # "FooNew-Medium"); display names get the real one ("Inter" → "Foo New").
+        # "MintNew-Medium"); display names get the real one ("Inter" → "Mint New").
         # Unique IDs (3) and instance names (≥ 256) can be either kind.
         s2 = s.replace(old_ps, new_ps) if _postscript_style(rec.nameID, s) else s.replace(old, new)
-        if s2 != s:
+        if s2 != s and UNDECODABLE not in s:
             rec.string = s2
 
-    # A PostScript name that doesn't contain the family ("FooSANS-Regular" for
-    # "Foo Sans") wasn't touched above; give it the new family in front of its
+    # A PostScript name that doesn't contain the family ("AcmeSANS-Regular" for
+    # "Acme Sans") wasn't touched above; give it the new family in front of its
     # old style suffix. Without a "-" there's no suffix to keep, so leave it.
     ps_prefix = old_ps
     if old_ps_name and get_name(font, 6) == old_ps_name and "-" in old_ps_name:
         ps_prefix = old_ps_name.partition("-")[0]
         for rec in name.names:
-            if _postscript_style(rec.nameID, value := rec.toUnicode()):
+            if _postscript_style(rec.nameID, value := text(rec)) and ps_prefix in value and UNDECODABLE not in value:
                 rec.string = value.replace(ps_prefix, new_ps)
     if "CFF " in font:
         cff = font["CFF "].cff
@@ -99,7 +106,7 @@ def rename_family(font: TTFont, old: str, new: str) -> list[str]:
     if old in new or ps_prefix in new_ps:
         return warnings
     leftovers = sorted({r.nameID for r in name.names if r.nameID in FAMILY_NAME_IDS
-                        and (old in r.toUnicode() or ps_prefix in r.toUnicode())})
+                        and (old in text(r) or ps_prefix in text(r))})
     if leftovers:
         ids = ", ".join(map(str, leftovers))
         warnings.append(f"some of the font's internal names (name ID {ids}) still contain '{old}'; "
@@ -136,8 +143,14 @@ def axis_label(tag: str, v: float) -> str:
 
 
 def normalize_style(style: str) -> str:
-    """Drop 'Regular' when other words carry the style: 'Condensed Regular' → 'Condensed'."""
-    words = [w for w in style.split() if w != "Regular"]
+    """Drop 'Regular' when other words carry the style ('Condensed Regular' →
+    'Condensed') and write two-word weights and widths as one ('Extra Bold' → 'ExtraBold')."""
+    words: list[str] = []
+    for word in style.split():
+        if words and words[-1] in STYLE_PREFIXES and word not in LINKED_WORDS[2:]:
+            words[-1] += word
+        elif word != "Regular":
+            words.append(word)
     return " ".join(words) or "Regular"
 
 
@@ -180,7 +193,11 @@ def set_static_names(font: TTFont, family: str, style: str, weight_class: int, w
     ps = ps_name(family, style)
 
     name = font["name"]
-    name.names = [r for r in name.names if r.platformID == 3 and r.nameID not in (16, 17, 21, 22, 25)]
+    # Windows records only, as before instancing they are the complete set in nearly
+    # every font; one without any keeps what it has, or its notices would be lost.
+    windows_only = any(r.platformID == 3 for r in name.names)
+    name.names = [r for r in name.names
+                  if r.nameID not in STATIC_NAME_IDS and (r.platformID == 3 or not windows_only)]
     _set(name, legacy_family, 1)
     _set(name, legacy_style, 2)
     if (legacy_family, legacy_style) != (family, style):

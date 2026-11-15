@@ -40,7 +40,7 @@ The rest of this document helps you navigate the codebase and make changes effec
 - **static input** means a non-variable TTF, OTF, WOFF or WOFF2 file. It passes through.
 - **variable input** means a font with an `fvar` table. It is the only input that produces static fonts, trimmed fonts and extra formats.
 - **named instance** means a style the font's designer defined in `fvar` (e.g. "Condensed Bold"). Without axis options, fontmint builds one static font per named instance.
-- **freeze** means remapping the character map so a GSUB substitution becomes the default glyph, then updating ligatures and context rules so they still work with the frozen glyphs. Rules the character map can't hold are added to `calt` (or `liga`).
+- **freeze** means remapping the character map so a GSUB substitution becomes the default glyph, then updating the font's other rules (ligatures, context rules, …) so they still work with the frozen glyphs. Rules the character map can't hold are added to `calt` (or `liga`).
 - **trimmed variable font** means a variable font whose axes were limited by a range (`--weight 300:700`).
 - **job** means one output built from a variable font, run in a worker process.
 
@@ -123,5 +123,8 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 - Quote file names with brackets (`'OpenSans[wdth,wght].ttf'`) in examples - zsh treats brackets as patterns. Don't quote real globs (`InterVariable*.ttf`), or the shell won't expand them.
 - ttfautohint fails on fonts without Latin reference glyphs (icon fonts). `convert.autohint` turns that into a `FontmintError` pointing at `--no-hint`.
 - A variable font can ship its own hinting. `*-hinted/` keeps it and `*-unhinted/` strips it (`convert.strip_hinting`); ttfautohint only runs for unhinted sources. A lone 7-byte `prep` + `gasp` (gftools' scan control, e.g. in JetBrains Mono) is **not** hinting - `convert.has_hinting` looks for `fpgm`, `cvt ` or glyph programs.
-- Names read from a font (family, PostScript name) are untrusted: anything that becomes a path goes through `naming.safe_path_part`. `--name` is validated by `naming.check_name` instead.
+- Names read from a font (family, PostScript name, axis tags) are untrusted: anything that becomes a path goes through `naming.safe_path_part`. `--name` is validated by `naming.check_name` instead.
+- Name records can hold bytes that don't decode (old Mac records). Read them with `common.text`, never `toUnicode()`, and don't write back a record that came out with U+FFFD.
+- A CFF charstring only states its width when it differs from the font's default width, and fontTools' `T2WidthExtractor.gotWidth` is set either way. `metrics._sync_cff_widths` tells the two apart; overwriting the first number of a charstring that states no width destroys its outline.
+- Whether a glyph has a width can depend on the axis values, so letter spacing is added after instancing (`Job.letter_spacing`), not to the variable font the jobs start from.
 - `common.load(check=True)` decompiles every table on a throwaway copy to catch damaged files, then returns a fresh lazy font - decompiled tables get re-serialized on save, which would change pass-through fonts.

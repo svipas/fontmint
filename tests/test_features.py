@@ -1,6 +1,7 @@
 import unittest
 
 from fontTools.feaLib.builder import addOpenTypeFeaturesFromString
+from fontTools.ttLib.tables import otTables
 
 from fontmint.common import FontmintError
 from fontmint.features import (
@@ -35,8 +36,9 @@ class FeaturesTest(unittest.TestCase):
             freeze_features(font, "ss01")
             self.assertEqual(font.getBestCmap()[ord("0")], "zero.ss01")
 
-    def test_ligatures_cannot_be_frozen(self):
+    def test_ligatures_dont_change_the_cmap(self):
         self.assertEqual(freeze_features(fx.open_font(fx.static_ttf()), "liga").remapped, 0)
+        self.assertEqual(freeze_features(fx.open_font(fx.static_ttf()), "").remapped, 0)
 
     def test_spaces_and_trailing_commas(self):
         font = fx.open_font(fx.static_ttf())
@@ -124,9 +126,14 @@ class FreezeOrderTest(unittest.TestCase):
             freeze_features(with_features(fea), "locl", "TRK")
         font = with_features(fea)
         records = font["GSUB"].table.FeatureList.FeatureRecord
-        for script in font["GSUB"].table.ScriptList.ScriptRecord:
-            for lang in script.Script.LangSysRecord:
-                lang.LangSys.FeatureIndex = [i for i in lang.LangSys.FeatureIndex if records[i].FeatureTag != "ss01"]
+        scripts = {record.ScriptTag: record.Script for record in font["GSUB"].table.ScriptList.ScriptRecord}
+        romanian = scripts["latn"].LangSysRecord[0].LangSys
+        romanian.FeatureIndex = [i for i in romanian.FeatureIndex if records[i].FeatureTag != "ss01"]
+        self.assertEqual(freeze_features(font, "ss01", "ROM").remapped, 1)  # a script without Romanian uses its default
+        font = with_features(fea.replace("languagesystem DFLT dflt;", ""))
+        records = font["GSUB"].table.FeatureList.FeatureRecord
+        romanian = font["GSUB"].table.ScriptList.ScriptRecord[0].Script.LangSysRecord[0].LangSys
+        romanian.FeatureIndex = [i for i in romanian.FeatureIndex if records[i].FeatureTag != "ss01"]
         with self.assertRaisesRegex(FontmintError, "no ss01 for language 'ROM'"):
             freeze_features(font, "ss01", "ROM")
 
@@ -208,6 +215,40 @@ class FreezeRepairTest(unittest.TestCase):
         nested = font["GSUB"].table.LookupList.Lookup[0].SubTable[0]
         self.assertEqual(nested.mapping.get("I.ss01"), "H")
 
+    def test_rules_between_two_frozen_steps_learn_the_final_glyph(self):
+        # calt sits between what makes zero.ss01 and what freezes it into I.ss01
+        calt = "feature calt { sub zero.ss01 x' by n; } calt;"
+        for spec, fea in (
+            ("ss01", "feature liga { sub H O by zero.ss01; } liga;" + calt + "feature ss01 { sub zero.ss01 by I.ss01; } ss01;"),
+            ("ss01,ss02", "feature ss01 { sub zero by zero.ss01; } ss01;" + calt
+                          + "feature ss02 { sub zero.ss01 by I.ss01; } ss02;"),
+        ):
+            with self.subTest(spec=spec):
+                font = with_features(fea)
+                result = freeze_features(font, spec)
+                chain = next(lk for lk in font["GSUB"].table.LookupList.Lookup if lk.LookupType == 6).SubTable[0]
+                self.assertEqual(chain.BacktrackCoverage[0].glyphs, ["zero.ss01", "I.ss01"])
+                self.assertEqual(result.stale_rules, 0)
+
+    def test_ligature_copies_keep_the_font_s_order(self):
+        font = with_features("feature liga { sub I zero by H; sub I zero O by x; } liga;"
+                             "feature ss01 { sub zero by zero.ss01; } ss01;")
+        ligatures = font["GSUB"].table.LookupList.Lookup[0].SubTable[0].ligatures
+        ligatures["I"].reverse()  # shorter first: the longer one never matches, and must not start to
+        freeze_features(font, "ss01")
+        self.assertEqual([list(lig.Component) for lig in ligatures["I"]],
+                         [["zero"], ["zero.ss01"], ["zero", "O"], ["zero.ss01", "O"]])
+
+    def test_reverse_chaining_rules_are_updated(self):
+        font = with_features("feature calt { rsub I I' by zero; } calt;"
+                             "feature ss01 { sub zero by zero.ss01; sub I by I.ss01; } ss01;")
+        result = freeze_features(font, "ss01")
+        rule = font["GSUB"].table.LookupList.Lookup[0].SubTable[0]
+        self.assertEqual((rule.Coverage.glyphs, rule.Substitute), (["I", "I.ss01"], ["zero.ss01", "zero.ss01"]))
+        self.assertEqual(rule.BacktrackCoverage[0].glyphs, ["I", "I.ss01"])
+        self.assertEqual((result.outputs_changed, result.stale_rules), (1, 0))
+        fx.open_font(fx._save(font))["GSUB"].ensureDecompiled()
+
     def test_one_glyph_entries_of_multiple_substitutions_freeze(self):
         # one rule produces two glyphs, so the whole lookup is a multiple substitution (type 2)
         font = with_features("feature ss04 { sub zero by zero.ss01; sub I by I.ss01; sub H by I O; } ss04;")
@@ -234,14 +275,22 @@ class FreezeRepairTest(unittest.TestCase):
     def test_rules_stay_put_where_moving_could_change_their_order(self):
         rules = "feature ss03 { sub zero by zero.ss01; sub I' zero by I.ss01; } ss03;"
         # Arabic engines run features in stages
-        font = with_features("languagesystem arab dflt; feature calt { sub O' I by o; } calt;" + rules)
-        self.assertEqual(freeze_features(font, "ss03").moved, [])
+        for scripts in ("languagesystem arab dflt;", "languagesystem latn dflt; languagesystem arab dflt;"):
+            font = with_features(scripts + "feature calt { sub O' I by o; } calt;" + rules)
+            self.assertEqual(freeze_features(font, "ss03").moved, [], scripts)  # also when Latin shares that calt
         # apps would pick the first alternate, not the second
         fea = ("lookup ALT { sub I from [I.ss01 H]; } ALT; feature calt { sub O' I by o; } calt;"
                "feature cv01 { sub zero from [zero.ss01 O]; sub I' lookup ALT zero; } cv01;")
         result = freeze_features(with_features(fea), "cv01=2")
         self.assertEqual((result.partial, result.moved), (["cv01"], []))
         self.assertEqual(freeze_features(with_features(fea), "cv01").moved, ["cv01"])  # the first alternate is fine
+        font = with_features(fea)
+        for lookup in font["GSUB"].table.LookupList.Lookup:  # large fonts wrap every lookup in an extension
+            for i, subtable in enumerate(lookup.SubTable):
+                lookup.SubTable[i] = extension = otTables.ExtensionSubst()
+                extension.Format, extension.ExtensionLookupType, extension.ExtSubTable = 1, lookup.LookupType, subtable
+            lookup.LookupType = 7
+        self.assertEqual(freeze_features(font, "cv01=2").moved, [])
 
     def test_partial_features_are_reported(self):
         font = with_features("feature ss03 { sub zero by zero.ss01; sub I' zero by I.ss01; } ss03;")

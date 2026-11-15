@@ -131,9 +131,9 @@ class CliTest(unittest.TestCase):
         code, out, _ = self.run_cli(self.tmp / "TestSans[wght,wdth].ttf", self.tmp / "TestSans-Regular.otf",
                                     "--info")
         self.assertEqual(code, 0)
-        self.assertIn("instances: Regular, Bold, Condensed, Condensed Bold", out)
+        self.assertIn("instances:   Regular, Bold, Condensed, Condensed Bold", out)
         self.assertIn("static font", out)
-        self.assertIn("features:  liga ss01\n  named:     ss01  Slashed zero\n", out)
+        self.assertIn("features:    liga ss01\n  named:       ss01  Slashed zero\n", out)
         self.assertIn("line height: 1.00", out)
         self.assertNotIn("positioning:", out)  # the test fonts have no GPOS features
 
@@ -143,6 +143,9 @@ class CliTest(unittest.TestCase):
             (("--weight", "950"), 1, "outside the axis range", "TestSans[wght,wdth].ttf"),
             (("--weight", "bold"), 1, "invalid axis value", "TestSans[wght,wdth].ttf"),
             (("--weight", "400", "--axis", "wght=700"), 1, "given twice", "TestSans[wght,wdth].ttf"),
+            (("--weight", "400", "--weight", "700"), 1, "--weight given twice; put all values in one list, e.g. "
+                                                        "--weight 400,700", "TestSans[wght,wdth].ttf"),
+            (("--slant", "-15,0"), 1, "font has no 'slnt' axis", "TestSans[wght,wdth].ttf"),
             (("--axis", "wdth"), 1, "TAG=VALUES", "TestSans[wght,wdth].ttf"),
             (("--formats", "pdf"), 1, "unknown format", "TestSans[wght,wdth].ttf"),
             (("--static", "400"), 2, "unrecognized arguments", "TestSans[wght,wdth].ttf"),

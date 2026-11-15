@@ -52,6 +52,11 @@ class StyleNameTest(unittest.TestCase):
         self.assertEqual(normalize_style("Regular Italic"), "Italic")
         self.assertEqual(normalize_style("Regular"), "Regular")
 
+    def test_two_word_weights_and_widths_become_one(self):
+        self.assertEqual(normalize_style("Extra Bold"), "ExtraBold")  # "Bold" alone would link it as the bold style
+        self.assertEqual(normalize_style("Semi Condensed Extra Light Italic"), "SemiCondensed ExtraLight Italic")
+        self.assertEqual(normalize_style("Ultra Italic"), "Ultra Italic")
+
     def test_style_name_override(self):
         self.assertEqual(apply_style_name("Regular", False), "Regular")
         self.assertEqual(apply_style_name("Regular", True), "Italic")
@@ -68,11 +73,11 @@ class StyleNameTest(unittest.TestCase):
 
 class NameValidationTest(unittest.TestCase):
     def test_valid(self):
-        for name in ("Inter Clear", "JetBrains Mono 2", "Foo-Bar", "A.B"):
+        for name in ("Inter Clear", "JetBrains Mono 2", "Mint-Sans", "A.B"):
             check_name(name, "--name")
 
     def test_invalid(self):
-        for name in ("Clär", "a/../../b", "Foo (Alt)", "50%", "..", " ", "Foo:Bar", 'a"b', "x|y", "back\\slash"):
+        for name in ("Clär", "a/../../b", "Mint (Alt)", "50%", "..", " ", "Mint:Sans", 'a"b', "x|y", "back\\slash"):
             with self.subTest(name=name), self.assertRaises(FontmintError):
                 check_name(name, "--name")
 
@@ -106,11 +111,11 @@ class RenameFamilyTest(unittest.TestCase):
         for i, value in ((1, "Inter Medium"), (16, "Inter"), (17, "Medium"), (4, "Inter Medium"),
                          (6, "Inter-Medium"), (3, "1.000;TEST;Inter-Medium")):
             name.setName(value, i, 3, 1, 0x409)
-        rename_family(font, "Inter", "Foo New")
-        self.assertEqual(name.getDebugName(1), "Foo New Medium")
-        self.assertEqual(name.getDebugName(16), "Foo New")
-        self.assertEqual(name.getDebugName(6), "FooNew-Medium")
-        self.assertEqual(name.getDebugName(3), "1.000;TEST;FooNew-Medium")
+        rename_family(font, "Inter", "Mint New")
+        self.assertEqual(name.getDebugName(1), "Mint New Medium")
+        self.assertEqual(name.getDebugName(16), "Mint New")
+        self.assertEqual(name.getDebugName(6), "MintNew-Medium")
+        self.assertEqual(name.getDebugName(3), "1.000;TEST;MintNew-Medium")
 
     def test_postscript_name_without_the_family(self):
         font = fx.open_font(fx.static_ttf())
@@ -139,6 +144,41 @@ class RenameFamilyTest(unittest.TestCase):
         font["name"].setName("テスト サンズ", 16, 3, 1, 0x411)
         rename_family(font, "Test Sans", "Mint Sans")
         self.assertFalse([r for r in font["name"].names if r.langID == 0x411 and r.nameID in (1, 16)])
+
+    def test_family_without_the_style_words_in_name_id_1(self):
+        # older fonts have no ID 16: ID 1 "Test Sans SemiBold" + ID 2 "Regular"
+        font = fx.open_font(fx.static_ttf())
+        font["name"].setName("Test Sans SemiBold", 1, 3, 1, 0x409)
+        font["name"].setName("Test Sans SemiBold", 4, 3, 1, 0x409)
+        font["name"].setName("TestSans-SemiBold", 6, 3, 1, 0x409)
+        self.assertEqual(family_name(font), "Test Sans")
+        rename_family(font, family_name(font), "Mint Sans")
+        self.assertEqual([font["name"].getDebugName(i) for i in (1, 4, 6)],
+                         ["Mint Sans SemiBold", "Mint Sans SemiBold", "MintSans-SemiBold"])
+
+    def test_fonts_without_windows_names(self):
+        font = fx.open_font(fx.static_ttf())
+        for record in font["name"].names:
+            record.string = record.toUnicode()
+            record.platformID, record.platEncID, record.langID = 0, 3, 0
+        self.assertEqual(family_name(font), "Test Sans")
+        rename_family(font, "Test Sans", "Mint Sans")
+        self.assertEqual([font["name"].getDebugName(i) for i in (0, 1, 6)], [fx.COPYRIGHT, "Mint Sans", "MintSans-Regular"])
+
+    def test_font_without_a_family_name_cannot_be_renamed(self):
+        font = fx.open_font(fx.static_ttf())
+        font["name"].setName("", 1, 3, 1, 0x409)
+        self.assertEqual(family_name(font), "Font")
+        with self.assertRaisesRegex(FontmintError, "doesn't state its family name"):
+            rename_family(font, family_name(font), "Mint Sans")
+
+    def test_undecodable_records_are_left_alone(self):
+        font = fx.open_font(fx.static_ttf())
+        full_name = font["name"].getName(4, 3, 1, 0x409)
+        full_name.string = b"\x00T\x00e\x00"  # odd length: not UTF-16
+        rename_family(font, "Test Sans", "Mint Sans")
+        self.assertEqual(full_name.string, b"\x00T\x00e\x00")
+        self.assertEqual(font["name"].getDebugName(1), "Mint Sans")
 
     def test_english_family_wins(self):
         font = fx.open_font(fx.static_ttf())
@@ -198,6 +238,24 @@ class SetStaticNamesTest(unittest.TestCase):
         self.assertEqual(n[2], "Regular")
         self.assertEqual(font["OS/2"].usWeightClass, 375)
         self.assertTrue(font["OS/2"].fsSelection & (1 << 6))  # REGULAR bit
+
+    def test_notices_stay_and_stale_names_go_on_every_platform(self):
+        font = fx.open_font(fx.static_ttf())
+        font["name"].setName("Standard", 2, 3, 1, 0x407)  # German "Regular"
+        set_static_names(font, "Mint Sans", "Bold", 700)
+        records = {(r.nameID, r.platformID, r.langID): r.toUnicode() for r in font["name"].names}
+        self.assertEqual({key: value for key, value in records.items() if key[0] in (1, 2)},
+                         {(1, 3, 0x409): "Mint Sans", (2, 3, 0x409): "Bold"})
+        self.assertEqual({platform for _, platform, _ in records}, {3})
+
+        font = fx.open_font(fx.static_ttf())  # a font with Mac names only keeps its notices
+        font["name"].names = [r for r in font["name"].names if r.platformID != 3]
+        font["name"].setName(fx.COPYRIGHT, 0, 1, 0, 0)
+        font["name"].setName("Test Sans", 1, 1, 0, 0)
+        set_static_names(font, "Mint Sans", "Bold", 700)
+        records = {(r.nameID, r.platformID, r.langID): r.toUnicode() for r in font["name"].names}
+        self.assertEqual((records[(0, 1, 0)], records[(1, 3, 0x409)]), (fx.COPYRIGHT, "Mint Sans"))
+        self.assertNotIn((1, 1, 0), records)
 
     def test_oblique(self):
         _, font, n = self.names("Oblique")

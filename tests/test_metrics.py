@@ -1,6 +1,8 @@
 import unittest
 
-from fontTools.misc.psCharStrings import T2WidthExtractor
+from fontTools.cffLib import SubrsIndex
+from fontTools.misc.psCharStrings import T2CharString, T2WidthExtractor
+from fontTools.pens.recordingPen import RecordingPen
 from fontTools.ttLib import newTable
 from fontTools.ttLib.tables import otTables
 
@@ -36,8 +38,10 @@ class LineHeightTest(unittest.TestCase):
             record = otTables.MetricsValueRecord()
             record.ValueTag, record.VarIdx = tag, 0
             mvar.ValueRecord.append(record)
+        font["VDMX"] = newTable("VDMX")  # line metrics per pixel size
         set_line_height(font, 1.5)
         self.assertEqual([r.ValueTag for r in font["MVAR"].table.ValueRecord], ["xhgt"])
+        self.assertNotIn("VDMX", font)
 
 
 class LetterSpacingTest(unittest.TestCase):
@@ -50,16 +54,62 @@ class LetterSpacingTest(unittest.TestCase):
             self.assertEqual((advance, lsb), (before[name][0] + 50 if before[name][0] else 0, before[name][1]))
         self.assertEqual(font["hhea"].advanceWidthMax, max(a for a, _ in font["hmtx"].metrics.values()))
 
-    def test_cff_outlines_store_the_same_width(self):
-        font = fx.open_font(fx.static_otf())
-        add_letter_spacing(font, 0.05)
-        top = fx.open_font(fx._save(font))["CFF "].cff.topDictIndex[0]
+    def cff_widths(self, font) -> dict:
+        top = font["CFF "].cff.topDictIndex[0]
+        widths = {}
         for name in top.CharStrings.keys():
             charstring = top.CharStrings[name]
             private = charstring.private
-            extractor = T2WidthExtractor([], top.GlobalSubrs, private.nominalWidthX, private.defaultWidthX)
+            extractor = T2WidthExtractor(getattr(private, "Subrs", []), top.GlobalSubrs, private.nominalWidthX,
+                                         private.defaultWidthX)
             extractor.execute(charstring)
-            self.assertEqual(extractor.width, font["hmtx"][name][0], name)
+            widths[name] = extractor.width
+        return widths
+
+    def outlines(self, font) -> dict:
+        glyphs, drawn = font.getGlyphSet(), {}
+        for name in font.getGlyphOrder():
+            drawn[name] = RecordingPen()
+            glyphs[name].draw(drawn[name])
+        return {name: pen.value for name, pen in drawn.items()}
+
+    def test_cff_outlines_store_the_same_width(self):
+        font = fx.open_font(fx.static_otf())
+        add_letter_spacing(font, 0.05)
+        font = fx.open_font(fx._save(font))
+        self.assertEqual(self.cff_widths(font), {name: 650 for name in font.getGlyphOrder()})
+
+    def test_cff_widths_left_to_the_default_or_kept_in_a_subroutine(self):
+        # real OTFs leave out the width of glyphs that have the font's default width (an
+        # empty glyph is then just "endchar"), and a subroutine can hold the width
+        font = fx.open_font(fx.static_otf())
+        top = font["CFF "].cff.topDictIndex[0]
+        top.Private.defaultWidthX = fx.ADVANCE
+        for name in ("space", "H"):
+            top.CharStrings[name].decompile()
+            del top.CharStrings[name].program[0]
+        shared = top.CharStrings["O"]
+        shared.decompile()
+        subroutine = T2CharString(program=[*shared.program[:4], "return"])  # width, x, y, rmoveto
+        top.Private.Subrs = SubrsIndex()
+        top.Private.Subrs.append(subroutine)
+        shared.program[:4] = [-107, "callsubr"]  # -107 is subroutine 0
+        font = fx.open_font(fx._save(font))
+        before = self.outlines(font)
+
+        add_letter_spacing(font, 0.05)
+        font = fx.open_font(fx._save(font))
+        self.assertEqual(self.cff_widths(font), {name: 650 for name in font.getGlyphOrder()})
+        self.assertEqual(self.outlines(font), before)
+
+    def test_double_width_glyphs_of_a_monospaced_font_get_twice_the_space(self):
+        font = fx.open_font(fx.static_ttf())
+        font["hmtx"].metrics["H"] = (1200, 60)  # fills two cells
+        add_letter_spacing(font, 0.05)
+        self.assertEqual((font["hmtx"]["H"][0], font["hmtx"]["O"][0]), (1300, 650))
+        font["hmtx"].metrics["x"] = (500, 30)  # proportional now: everything gets the same space
+        add_letter_spacing(font, 0.05)
+        self.assertEqual((font["hmtx"]["H"][0], font["hmtx"]["O"][0]), (1350, 700))
 
     def test_negative_spacing_never_goes_below_zero(self):
         font = fx.open_font(fx.static_ttf())
@@ -79,6 +129,19 @@ class MetricsOptionsTest(unittest.TestCase):
         (path, data), = spaced.items()
         before, after = fx.open_font(plain[path])["hmtx"], fx.open_font(data)["hmtx"]
         self.assertEqual(after["H"][0], before["H"][0] + 20)  # on top of the bold instance's own width
+
+    def test_spacing_is_decided_per_instance(self):
+        # like Recursive's fraction slash: no width at the default, a full one in the condensed style
+        source = fx.open_font(fx.variable_ttf())
+        source["hmtx"].metrics["x"] = (0, 30)
+        for variation in source["gvar"].variations["x"]:
+            if "wdth" in variation.axes:
+                variation.coordinates[5] = (600, 0)  # the advance width's point: 0 → 600 at wdth 75
+        options = Options(name="Mint Sans", letter_spacing=0.05, formats="ttf", hint=False)
+        files = mint(fx._save(source), options)
+        widths = {path.split("/")[-1]: fx.open_font(data)["hmtx"]["x"][0] for path, data in files.items()}
+        self.assertEqual(widths["MintSans[wght,wdth].ttf"], 0)  # the variable font decides at its default
+        self.assertEqual((widths["MintSans-Regular.ttf"], widths["MintSans-Condensed.ttf"]), (0, 650))
 
     def test_out_of_range(self):
         for options, message in ((Options(line_height=0), "--line-height 0 is out of range"),

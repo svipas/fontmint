@@ -22,7 +22,7 @@ Examples:
     fontmint InterVariable.ttf --name "Inter Light" --weight 300:700
 
     # a static font: freeze + rename only, same format, hinting kept
-    fontmint FooFont-Regular.otf --features ss01 --name "Foo New"
+    fontmint FiraCode-Regular.ttf --features zero --name "Fira Code Zero"
 
     # a coding font without ligatures (JetBrains Mono keeps them in calt)
     fontmint JetBrainsMono*.ttf --disable calt --name "JetBrains Mono Flat"
@@ -41,13 +41,13 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from . import core
+from . import __version__, core
 from .common import FORMATS, FontmintError
 
 AXIS_FLAGS = {  # flag → (axis tag, help)
@@ -95,17 +95,19 @@ def write_files(files: dict[str, bytes], out: Path) -> None:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
-        except OSError as e:
-            raise FontmintError(f"can't write {path}: {e.strerror}") from e
+        except (OSError, ValueError) as e:  # ValueError: a path the OS rejects, e.g. with a null byte
+            raise FontmintError(f"can't write {path}: {getattr(e, 'strerror', None) or e}") from e
         log(f"  {rel}")
 
 
 def collect_axes(args: argparse.Namespace) -> dict[str, str]:
     axes: dict[str, str] = {}
     for flag, (tag, _) in AXIS_FLAGS.items():
-        value = getattr(args, flag.lstrip("-").replace("-", "_"))
-        if value is not None:
-            axes[tag] = value
+        values = getattr(args, flag.lstrip("-").replace("-", "_"))
+        if len(values) > 1:
+            raise FontmintError(f"{flag} given twice; put all values in one list, e.g. {flag} {','.join(values)}")
+        if values:
+            axes[tag] = values[0]
     for item in args.axis:
         tag, sep, spec = item.partition("=")
         if not sep or not tag or not spec:
@@ -123,28 +125,24 @@ def show_info(path: Path) -> None:
         info = core.inspect(read_font(path))
     except FontmintError as e:
         raise FontmintError(f"{path.name}: {e}") from e
-    print(f"{path.name}\n  family:    {info.family}")
+    def row(label: str, value: str) -> None:
+        print(f"  {label:<12} {value}")
+
+    print(path.name)
+    row("family:", info.family)
     if not info.variable:
-        print("  type:      static font (features can be frozen; axis options don't apply)")
+        row("type:", "static font (features can be frozen; axis options don't apply)")
     else:
-        axes = ", ".join(f"{t} {lo:g}–{hi:g} (default {d:g})" for t, lo, d, hi in info.axes)
-        print(f"  axes:      {axes}")
-        print(f"  instances: {', '.join(name for name, _ in info.instances) or '-'}")
-    print(f"  features:  {' '.join(info.features) or '-'}")
+        row("axes:", ", ".join(f"{t} {lo:g}–{hi:g} (default {d:g})" for t, lo, d, hi in info.axes))
+        row("instances:", ", ".join(name for name, _ in info.instances) or "-")
+    row("features:", " ".join(info.features) or "-")
     for i, (tag, name) in enumerate(info.feature_names.items()):
-        print(f"  {'named:' if i == 0 else '':<10} {tag}  {name}")
+        row("" if i else "named:", f"{tag}  {name}")
     if info.positioning:
-        print(f"  positioning: {' '.join(info.positioning)}")
+        row("positioning:", " ".join(info.positioning))
     if info.languages:
-        print(f"  languages: {' '.join(info.languages)}")
-    print(f"  line height: {info.line_height:.2f}")
-
-
-def package_version() -> str:
-    try:
-        return version("fontmint")
-    except PackageNotFoundError:
-        return "unknown"
+        row("languages:", " ".join(info.languages))
+    row("line height:", f"{info.line_height:.2f}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -160,7 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("fonts", nargs="+", type=Path, metavar="FONT",
                    help="font file(s): variable or static TTF/OTF/WOFF/WOFF2")
-    p.add_argument("--version", action="version", version=f"%(prog)s {package_version()}")
+    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     p.add_argument("--info", action="store_true",
                    help="show the font's axes, named instances, features and languages, then exit")
     p.add_argument("--features", default="", metavar="TAGS",
@@ -172,14 +170,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--disable", default="", metavar="TAGS",
                    help="features to turn off, e.g. calt,liga for no ligatures (--info shows which a font has)")
     p.add_argument("--line-height", type=float, default=None, metavar="N",
-                   help="line spacing as a multiple of the font size, like CSS line-height, e.g. 1.4 "
-                        "(--info shows the current value)")
+                   help="line spacing as a multiple of the font size, like CSS line-height, e.g. 1.4; "
+                        "0.5 to 3 (--info shows the current value)")
     p.add_argument("--letter-spacing", type=float, default=0, metavar="EM",
                    help="extra space after each character as a fraction of the font size, like CSS "
-                        "letter-spacing in em, e.g. 0.05 (negative values tighten)")
+                        "letter-spacing in em, e.g. 0.05; -0.5 to 1 (negative values tighten)")
     p.add_argument("--subset", default="", metavar="LIST",
                    help="keep only these characters, for smaller web fonts: latin, latin-ext, cyrillic, "
-                        "cyrillic-ext, greek, vietnamese, or ranges like U+2190-21FF (comma-separated)")
+                        "cyrillic-ext, greek, vietnamese, or ranges like U+2190-21FF (comma-separated). "
+                        "Only latin has digits, punctuation and the space: add it to the others")
     p.add_argument("--name", default="", metavar="NAME",
                    help='new family name, e.g. "Inter Clear" (recommended, so your build doesn\'t clash with '
                         'the original)')
@@ -192,7 +191,7 @@ def build_parser() -> argparse.ArgumentParser:
         "Without any axis option: the variable font plus a static font per named instance.",
     )
     for flag, (tag, help_text) in AXIS_FLAGS.items():
-        g.add_argument(flag, default=None, metavar="VALUES", help=f"{help_text} [{tag}]")
+        g.add_argument(flag, action="append", default=[], metavar="VALUES", help=f"{help_text} [{tag}]")
     g.add_argument("--axis", action="append", default=[], metavar="TAG=VALUES",
                    help="any other axis by its tag, e.g. --axis MONO=1 (repeatable)")
     g.add_argument("--style-name", default="", metavar="NAME",
@@ -250,7 +249,7 @@ def run(args: argparse.Namespace) -> None:
 
     for path, prepared in prepared_fonts:
         log(path.name)
-        if (out / prepared.folder).is_dir() and any((out / prepared.folder).iterdir()):
+        if _has_files(out / prepared.folder):
             log(f"  warning: {out / prepared.folder} already exists; files from earlier runs are kept unless this run "
                 "replaces them")
         if options.features:
@@ -272,7 +271,7 @@ def run(args: argparse.Namespace) -> None:
         files |= prepared.files
     jobs = [(path, job) for path, prepared in prepared_fonts for job in prepared.jobs]
     if jobs:
-        workers = max(1, min(args.jobs, len(jobs)))
+        workers = min(args.jobs, len(jobs), 61)  # Windows can't run more than 61 worker processes
         log(f"building {len(jobs)} font(s) with {workers} worker(s)…")
         with ProcessPoolExecutor(max_workers=workers) as pool:
             futures = {pool.submit(core.build_job, job): (path, job) for path, job in jobs}
@@ -289,9 +288,31 @@ def run(args: argparse.Namespace) -> None:
     log(f"done: {len(files)} file(s)")
 
 
+def _has_files(folder: Path) -> bool:
+    try:
+        return folder.is_dir() and any(folder.iterdir())
+    except OSError:  # not readable; writing reports it
+        return False
+
+
+def _join_negative_axis_values(argv: list[str]) -> list[str]:
+    """`--slant -15,0` → `--slant=-15,0`: before Python 3.14, argparse takes a value
+    like `-15,0` or `-15:0` for an unknown option (a plain `-15` is fine)."""
+    joined: list[str] = []
+    for arg in argv:
+        if joined and joined[-1] in AXIS_FLAGS and re.match(r"-[\d.]", arg):
+            joined[-1] += f"={arg}"
+        else:
+            joined.append(arg)
+    return joined
+
+
 def main(argv: list[str] | None = None) -> None:
+    for stream in (sys.stdout, sys.stderr):  # font and file names can hold characters a terminal can't show
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(_join_negative_axis_values(sys.argv[1:] if argv is None else argv))
     try:
         run(args)
     except FontmintError as e:

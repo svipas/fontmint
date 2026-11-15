@@ -23,7 +23,7 @@ This command builds 94 files: the Inter font with its `ss02` set (slashed zero, 
 - **Pick an alternate** - when a feature offers several alternative shapes for a character, choose which one becomes the default: `cv47=2` picks the second.
 - **Turn features off** - for example `--disable calt` for a coding font without ligatures.
 - **Line height and letter spacing** - `--line-height 1.5` and `--letter-spacing 0.02`, measured like in CSS, for apps that have no such settings.
-- **Smaller web fonts** - `--subset latin` keeps only the characters you need; all features, names and hinting stay.
+- **Smaller web fonts** - `--subset latin` keeps only the characters you need, with their features, the font's names and its hinting.
 - **Rename the family** - your build installs next to the original without conflicts. Copyright, trademark and license notices are never changed. If the font's license reserves its name, choose a `--name` that doesn't contain it.
 - **Works on static fonts too** - a static (non-variable) TTF, OTF, WOFF or WOFF2 file keeps everything except what you change (features, name, line height, letter spacing, subset): same format, original hinting kept.
 - **Variable fonts** - keep every axis (weight, width, …) in one file (TTF + WOFF2), or trim an axis: `--weight 300:700` makes a smaller variable font with only those weights.
@@ -62,20 +62,21 @@ fontmint 'OpenSans[wdth,wght].ttf' --info
 
 ```text
 OpenSans[wdth,wght].ttf
-  family:    Open Sans
-  axes:      wght 300–800 (default 400), wdth 75–100 (default 100)
-  instances: Light, Regular, SemiBold, Bold, ExtraBold, Condensed Light, Condensed Regular, …
-  features:  aalt ccmp dnom frac liga … ss01 ss02 ss03 ss04 subs sups tnum zero
+  family:      Open Sans
+  axes:        wght 300–800 (default 400), wdth 75–100 (default 100)
+  instances:   Light, Regular, SemiBold, Bold, ExtraBold, Condensed Light, Condensed Regular, …
+  features:    aalt ccmp dnom frac liga … ss01 ss02 ss03 ss04 subs sups tnum zero
   positioning: mark mkmk
-  languages: APPH CAT IPPH MAH MKD MOL NAV ROM SRB
+  languages:   APPH CAT IPPH MAH MKD MOL NAV ROM SRB
+  line height: 1.36
 ```
 
 If the font names its features, the names are listed under them, so you can see what each one changes:
 
 ```text
-  named:     cv01  Alternate one
-             …
-             ss02  Disambiguation
+  named:       cv01  Alternate one
+               …
+               ss02  Disambiguation
 ```
 
 ### Static fonts: freeze and rename only
@@ -83,8 +84,8 @@ If the font names its features, the names are listed under them, so you can see 
 A static font (TTF, OTF, WOFF or WOFF2) comes back in **the same format** - only what you ask for changes: features, the name, line height, letter spacing and subset. Glyph shapes, hinting and all other font data stay as they were, and no other formats are created.
 
 ```bash
-fontmint FooFont-Regular.otf --features ss01 --name "Foo New"
-# → dist/FooNew/FooNew-Regular.otf
+fontmint FiraCode-Regular.ttf --features zero --name "Fira Code Zero"
+# → dist/FiraCodeZero/FiraCodeZero-Regular.ttf
 ```
 
 ### Pick alternates and turn features off
@@ -121,7 +122,7 @@ Some apps have no setting for the space between lines or letters. Build it into 
 fontmint JetBrainsMono*.ttf --name "JetBrains Mono Airy" --line-height 1.5 --letter-spacing 0.02
 ```
 
-`--info` shows a font's current line height (JetBrains Mono: 1.32). The extra line space is split equally above and below the text, and accents and kerning stay where they belong.
+`--info` shows a font's current line height (JetBrains Mono: 1.32). The extra line space is split equally above and below the text, and accents and kerning stay where they belong. In a monospaced font, double-width glyphs get twice the letter spacing, so they still fill two cells. Line height can be 0.5 to 3, letter spacing -0.5 to 1.
 
 ### Smaller web fonts
 
@@ -131,7 +132,7 @@ A font for a website usually needs far fewer characters than the full font has. 
 fontmint InterVariable.ttf --name "Inter Web" --subset latin,latin-ext --formats woff2
 ```
 
-The presets are `latin`, `latin-ext`, `cyrillic`, `cyrillic-ext`, `greek` and `vietnamese` (the character sets Google Fonts uses), and you can add ranges like `U+2190-21FF`. Glyphs the remaining characters need stay too, such as their alternates and ligatures, and so do all features, names and hinting. For the Inter variable font:
+The presets are `latin`, `latin-ext`, `cyrillic`, `cyrillic-ext`, `greek` and `vietnamese` (the character sets Google Fonts uses), and you can add ranges like `U+2190-21FF`. Only `latin` has digits, punctuation and the space, so add it to the others: `--subset latin,cyrillic`. Glyphs the remaining characters need stay too, such as their alternates and ligatures, and so do their features, the font's names and its hinting. For the Inter variable font:
 
 | Subset            | Characters | WOFF2  | TTF    |
 | ----------------- | ---------- | ------ | ------ |
@@ -149,7 +150,7 @@ Without axis options, you get the variable font **plus** a static font for every
 fontmint InterVariable.ttf InterVariable-Italic.ttf --features ss02 --name "Inter Clear"
 ```
 
-If the family has a separate italic file, pass it too - each input file produces its own output. The variable font itself is only frozen and renamed: fontmint doesn't add hinting or convert outlines.
+If the family has a separate italic file, pass it too - each input file produces its own output. The variable font itself only gets the changes you ask for: fontmint doesn't add hinting or convert outlines.
 
 ### Variable fonts: pick axis values
 
@@ -319,6 +320,7 @@ Options also take the same text as the command line, like `features="ss02,cv47=2
 
 - Only rules that replace one glyph with another can be frozen everywhere (`ssXX`, `cvXX`, `zero`, `tnum`, …). Rules for ligatures (several characters joined into one glyph) or that depend on the neighboring characters are added to the font's default features instead, so they work in most apps, but not in editors and terminals with ligatures turned off. fontmint tells you when that happens.
 - Freezing also updates ligatures and other rules that use the frozen characters. In rare cases a rule can't be updated; fontmint warns when that happens.
+- Variable fonts with CFF2 outlines (variable `.otf` files) stay variable: fontmint changes and trims them, but can't build static fonts from them yet.
 - Font collections (`.ttc`) aren't supported; extract the fonts from them first.
 
 ## Development

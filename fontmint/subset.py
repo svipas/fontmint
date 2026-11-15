@@ -46,8 +46,10 @@ def parse_subset(spec: str) -> set[int]:
 
 def subset_font(font: TTFont, codepoints: set[int]) -> tuple[int, int]:
     """Keep only the characters in `codepoints`, and the glyphs they need (including
-    alternates their features can reach). Everything else stays: all features,
-    names, hinting and glyph names. Returns (characters kept, characters before)."""
+    alternates their features can reach). Names, hinting, glyph names and every
+    feature that still has glyphs stay. Tables fontTools can't subset are dropped
+    (e.g. bitmaps, Apple's morx), as they would point at the wrong glyphs.
+    Returns (characters kept, characters before)."""
     before = set(font.getBestCmap() or {})
     kept = before & codepoints
     if not kept:
@@ -59,11 +61,12 @@ def subset_font(font: TTFont, codepoints: set[int]) -> tuple[int, int]:
     options.name_legacy = True
     options.notdef_outline = True
     options.glyph_names = True
-    options.legacy_cmap = True
     options.symbol_cmap = True
     options.legacy_kern = True
-    options.passthrough_tables = True
     subsetter = Subsetter(options)
     subsetter.populate(unicodes=kept)
-    subsetter.subset(font)
+    try:
+        subsetter.subset(font)
+    except Exception as e:  # a table fontTools can't handle
+        raise FontmintError(f"this font can't be subset ({type(e).__name__}: {e})") from e
     return len(kept), len(before)

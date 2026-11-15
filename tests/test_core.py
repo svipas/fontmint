@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fontTools.feaLib.builder import addOpenTypeFeaturesFromString
 from fontTools.misc.xmlWriter import XMLWriter
+from fontTools.ttLib import newTable
 
 from fontmint import FontmintError, Options, inspect, mint, prepare
 
@@ -189,12 +190,19 @@ class UntrustedNamesTest(unittest.TestCase):
         font = fx.open_font(fx.variable_ttf() if variable else fx.static_ttf())
         for name_id, value in ((1, "../../escaped"), (16, "../../escaped"), (6, "../../escaped-Regular")):
             font["name"].setName(value, name_id, 3, 1, 0x409)
+        if variable:
+            font["fvar"].axes[1].axisTag = "../x"
+            for instance in font["fvar"].instances:
+                instance.coordinates["../x"] = instance.coordinates.pop("wdth")
+            for variations in font["gvar"].variations.values():
+                for variation in variations:
+                    if "wdth" in variation.axes:
+                        variation.axes["../x"] = variation.axes.pop("wdth")
         return fx._save(font)
 
     def test_paths_stay_inside(self):
-        for variable in (False, True):
-            files = mint(self.evil_font(variable), Options(axes={"wght": "400"} if variable else {}, formats="ttf",
-                                                             hint=False))
+        for axes in (None, {}, {"wght": "400"}, {"wght": "300:700", "../x": "75:100"}):
+            files = mint(self.evil_font(axes is not None), Options(axes=axes or {}, formats="ttf", hint=False))
             for path in files:
                 with self.subTest(path=path):
                     self.assertNotIn("..", path.split("/"))
@@ -255,6 +263,33 @@ class NewOptionsTest(unittest.TestCase):
         regular = fx.open_font(files["MintSans/ttf-unhinted/MintSans-Regular.ttf"])  # every glyph is 600 wide
         bold = fx.open_font(files["MintSans/ttf-unhinted/MintSans-Bold.ttf"])  # space stays 600, letters grow
         self.assertEqual((regular["post"].isFixedPitch, bold["post"].isFixedPitch), (1, 0))
+
+    def test_font_without_a_weight_axis_keeps_its_weight(self):
+        font = fx.open_font(fx.variable_ttf())
+        font["gvar"].variations = {glyph: [v for v in variations if "wght" not in v.axes]
+                                   for glyph, variations in font["gvar"].variations.items()}
+        font["fvar"].axes = [axis for axis in font["fvar"].axes if axis.axisTag == "wdth"]
+        for instance in font["fvar"].instances:
+            del instance.coordinates["wght"]
+        font["OS/2"].usWeightClass = 700
+        files = mint(fx._save(font), Options(name="Mint Sans", axes={"wdth": "75"}, formats="ttf", hint=False))
+        (path, data), = files.items()
+        self.assertEqual(path, "MintSans/ttf-unhinted/MintSans-CondensedBold.ttf")
+        self.assertEqual(fx.open_font(data)["OS/2"].usWeightClass, 700)
+
+    def test_symbol_character_map(self):
+        font = fx.open_font(fx.symbol_variable_ttf())
+        for table in font["cmap"].tables:
+            table.platEncID = 0  # Windows Symbol: no Unicode character map at all
+        files = mint(fx._save(font), Options(name="Mint Icons", axes={"wght": "700"}, formats="ttf", hint=False))
+        self.assertEqual(list(files), ["MintIcons/ttf-unhinted/MintIcons-Bold.ttf"])
+
+    def test_signature_is_dropped(self):
+        font = fx.open_font(fx.static_ttf())
+        font["DSIG"] = newTable("DSIG")
+        font["DSIG"].ulVersion, font["DSIG"].usFlag, font["DSIG"].usNumSigs, font["DSIG"].signatureRecords = 1, 0, 0, []
+        (data,) = mint(fx._save(font), Options(features="ss01", name="Mint Sans")).values()
+        self.assertNotIn("DSIG", fx.open_font(data))  # it signed the original, not this build
 
     def test_long_family_name_warns(self):
         p = prepare(fx.variable_ttf(), Options(name="A Rather Long Family Name", axes={"wght": "700", "wdth": "75"}))
@@ -411,7 +446,7 @@ class AxisOptionsTest(unittest.TestCase):
         font = fx.open_font(next(iter(files.values())))
         self.assertEqual(font["name"].getDebugName(1), "Mint Sans")
         with self.assertRaisesRegex(FontmintError, "may only use"):
-            self.build(name='Foo:Bar*', axes={"wght": "400"})
+            self.build(name='Mint:Sans*', axes={"wght": "400"})
 
     def test_original_name_warns(self):
         p = prepare(fx.variable_ttf(), Options(name="Test Sans"))
@@ -421,8 +456,8 @@ class AxisOptionsTest(unittest.TestCase):
         self.assertTrue(self.build(features=None, axes={"wght": "400"}))
 
     def test_options_accept_strings_and_lists(self):
-        files = mint(fx.variable_ttf(), Options(name="Mint Sans", features=["ss01"], axes={"wght": "400"},
-                                                formats="ttf", hint=False))
+        files = mint(fx.variable_ttf(), Options(name="Mint Sans", features=["ss01"], subset=["latin", "U+2190"],
+                                                axes={"wght": "400"}, formats="ttf", hint=False))
         self.assertEqual(fx.open_font(next(iter(files.values()))).getBestCmap()[ord("0")], "zero.ss01")
 
     def test_unfreezable_feature_warns(self):

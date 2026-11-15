@@ -56,18 +56,43 @@ def extension(font: TTFont) -> str:
     return "otf" if font.sfntVersion == "OTTO" else "ttf"
 
 
+def text(record) -> str:
+    """A name record's text. Bytes that can't be decoded (seen in old Mac records)
+    become U+FFFD instead of an error."""
+    return record.toUnicode(errors="replace")
+
+
 def get_name(font: TTFont, name_id: int) -> str | None:
-    rec = font["name"].getName(name_id, 3, 1, 0x409) or font["name"].getName(name_id, 3, 1)
-    return rec.toUnicode() if rec else None
+    """A name's text: the Windows English record, else whichever the font has."""
+    name = font["name"]
+    rec = name.getName(name_id, 3, 1, 0x409) or name.getName(name_id, 3, 1)
+    if not rec:
+        rec = next((r for r in name.names if r.nameID == name_id), None)
+    return text(rec) if rec else None
 
 
 def family_name(font: TTFont) -> str:
     """The family name, preferring English records over localized ones."""
+    name = font["name"]
     for name_id in (16, 1):
-        rec = font["name"].getName(name_id, 3, 1, 0x409) or font["name"].getName(name_id, 1, 0, 0)
-        if rec:
-            return rec.toUnicode()
+        rec = name.getName(name_id, 3, 1, 0x409) or name.getName(name_id, 1, 0, 0)
+        family = text(rec) if rec else ""
+        if family and name_id == 1:
+            family = _without_style(family, get_name(font, 6) or "")
+        if family:
+            return family
     return get_name(font, 16) or get_name(font, 1) or "Font"
+
+
+def _without_style(family: str, ps_name: str) -> str:
+    """Older fonts have no name ID 16 and keep part of the style in ID 1 ("Acme Sans
+    SemiBold"). The PostScript name ("AcmeSans-SemiBold") shows where the family ends."""
+    prefix, dash, _ = ps_name.partition("-")
+    if dash and prefix and family.replace(" ", "").startswith(prefix):
+        for end in range(1, len(family)):
+            if family[:end].replace(" ", "") == prefix and family[end] == " ":
+                return family[:end]
+    return family
 
 
 def is_italic(font: TTFont) -> bool:

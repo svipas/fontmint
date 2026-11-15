@@ -17,7 +17,7 @@ Only the standard library's `unittest` is used - don't add pytest or other test 
 | `tests/fixtures.py`      | builds the test fonts (not a test module)                                      |
 | `tests/test_axes.py`     | spec parsing, combination planning, range/axis errors                          |
 | `tests/test_naming.py`   | style composition, renaming (notices, one-word families, CFF), name records    |
-| `tests/test_features.py` | freezing in TTF / OTF / variable fonts                                         |
+| `tests/test_features.py` | freezing, repairing the font's other rules, languages, disabling               |
 | `tests/test_metrics.py`  | line height and letter spacing                                                 |
 | `tests/test_subset.py`   | subset presets, ranges, what's kept                                            |
 | `tests/test_core.py`     | end-to-end outputs for every mode, option errors, native helpers stay unloaded |
@@ -27,17 +27,17 @@ Only the standard library's `unittest` is used - don't add pytest or other test 
 
 `tests/fixtures.py` builds fonts with fontTools' `FontBuilder` - no binary files in the repo. All are family **"Test Sans"** with rectangle glyphs:
 
-| Function                       | Font                                                                                                  |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `variable_ttf(italic, hinted)` | `wght` 100–900 (default 400), `wdth` 75–100; instances Regular, Bold, Condensed, Condensed Bold       |
-| `static_ttf(hinted)`           | static TrueType                                                                                       |
-| `static_otf()`                 | static CFF                                                                                            |
-| `static_woff2()`               | static WOFF2                                                                                          |
-| `symbol_variable_ttf()`        | variable font with only arrow glyphs - ttfautohint refuses it, for testing `--no-hint` and job errors |
-| `mac_cmap_ttf()`               | static font with an old Mac (format 0) cmap and a frozen glyph whose ID is above 255                  |
-| `axis_swap_variable_ttf()`     | variable font whose `0` becomes `O` at heavy weights (an `rvrn` feature variation)                    |
+| Function                                     | Font                                                                                                  |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `variable_ttf(italic, hinted, scan_control)` | `wght` 100–900 (default 400), `wdth` 75–100; instances Regular, Bold, Condensed, Condensed Bold       |
+| `static_ttf(hinted)`                         | static TrueType                                                                                       |
+| `static_otf()`                               | static CFF                                                                                            |
+| `static_woff2()`                             | static WOFF2                                                                                          |
+| `symbol_variable_ttf()`                      | variable font with only arrow glyphs - ttfautohint refuses it, for testing `--no-hint` and job errors |
+| `mac_cmap_ttf()`                             | static font with an old Mac (format 0) cmap and a frozen glyph whose ID is above 255                  |
+| `axis_swap_variable_ttf()`                   | variable font whose `0` becomes `O` at heavy weights (an `rvrn` feature variation)                    |
 
-`hinted=True` adds dummy `fpgm`/`prep`/`cvt ` tables and glyph programs: static passthrough must keep them byte for byte, and the `*-unhinted/` outputs of a hinted variable font must have none.
+`hinted=True` adds dummy `fpgm`/`prep`/`cvt ` tables and glyph programs: static passthrough must keep them byte for byte, and the `*-unhinted/` outputs of a hinted variable font must have none. `scan_control=True` adds only the short `prep` + `gasp` that build tools put in unhinted fonts.
 
 The Latin fixtures have `ss01` ("Slashed zero": `zero → zero.ss01`, `I → I.ss01`), an unfreezable `liga` ligature, and a copyright/trademark containing "Test Sans", so renaming bugs show up. Variation deltas are simple: bold adds +80 to the right edge at wght 900 (so +48 at 700), condensed −100.
 

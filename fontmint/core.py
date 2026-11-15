@@ -3,13 +3,13 @@
 Nothing here touches the filesystem, parses arguments, prints or exits, so it can
 be used from the CLI, from other Python code, or in a browser (Pyodide).
 
-Static fonts (TTF, OTF, WOFF, WOFF2) pass through: features are frozen, the family
-renamed and line metrics adjusted as asked, nothing else changes - same format,
-hinting kept, no extra files.
+Static fonts (TTF, OTF, WOFF, WOFF2) pass through: only what the options ask for
+changes (features, name, line height, letter spacing, subset) - same format, hinting
+kept, no extra files.
 
 Variable fonts produce:
-  - the variable font itself (features frozen, renamed, otherwise unchanged)
-    plus a static font for every named instance - when no axis options are given;
+  - the variable font itself (with the same edits, otherwise unchanged) plus a
+    static font for every named instance - when no axis options are given;
   - otherwise exactly what the axis options ask for: pinned values → static fonts,
     ranges → trimmed variable fonts.
 
@@ -40,7 +40,14 @@ from .features import (
     parse_features,
     parse_tags,
 )
-from .metrics import LETTER_SPACING_RANGE, LINE_HEIGHT_RANGE, add_letter_spacing, line_height, set_line_height
+from .metrics import (
+    LETTER_SPACING_RANGE,
+    LINE_HEIGHT_RANGE,
+    add_letter_spacing,
+    fixed_width,
+    line_height,
+    set_line_height,
+)
 from .naming import (
     WINDOWS_FAMILY_LIMIT,
     apply_style_name,
@@ -77,7 +84,7 @@ class Options:
     line_height: line spacing as a multiple of the font size, like CSS, e.g. 1.4.
     letter_spacing: extra space after each character as a fraction of the font size,
                  like CSS letter-spacing in em, e.g. 0.05 (negative tightens).
-    subset:      characters to keep, e.g. "latin,latin-ext" or "U+0000-00FF,U+20AC";
+    subset:      characters to keep, "latin,latin-ext" or ["latin", "U+20AC", "U+2190-21FF"];
                  empty keeps all.
     name:        new family name.
     axes:        axis tag → values, e.g. {"wght": "400,700", "wdth": [75, (75, 100)]}.
@@ -97,7 +104,7 @@ class Options:
     disable: str | list[str] = ""
     line_height: float | None = None
     letter_spacing: float = 0
-    subset: str = ""
+    subset: str | list[str] = ""
     name: str = ""
     axes: dict[str, object] = field(default_factory=dict)
     style_name: str = ""
@@ -113,6 +120,8 @@ class Options:
             self.features = ",".join(self.features or [])
         if not isinstance(self.disable, str):
             self.disable = ",".join(self.disable or [])
+        if not isinstance(self.subset, str):
+            self.subset = ",".join(self.subset or [])
         self.language = self.language.strip().upper()
         self.name = " ".join(self.name.split())
         self.style_name = " ".join(self.style_name.split())
@@ -173,6 +182,7 @@ class Job:
     style: str = ""
     weight_class: int = 400
     width_class: int | None = None
+    letter_spacing: float = 0                  # added after instancing, where each glyph's final width is known
     formats: set[str] = field(default_factory=lambda: set(FORMATS))
     hint: bool = True
     remove_overlaps: bool = True
@@ -199,7 +209,6 @@ class Prepared:
         return safe_path_part(self.family)
 
 
-
 def inspect(font_bytes: bytes) -> FontInfo:
     """Family, axes, named instances and features of a font."""
     font = load(font_bytes)
@@ -214,9 +223,8 @@ def inspect(font_bytes: bytes) -> FontInfo:
                     line_height(font))
 
 
-
 def prepare(font_bytes: bytes, options: Options) -> Prepared:
-    """Freeze features and rename one font, and plan everything to build from it."""
+    """Apply the options to one font, and plan everything to build from it."""
     options.validate()
     spec = parse_features(options.features)
     disable = parse_tags(options.disable)
@@ -249,10 +257,9 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
 
     if options.line_height is not None:
         set_line_height(font, options.line_height)
-    if options.letter_spacing:
-        add_letter_spacing(font, options.letter_spacing)
-
     subset = subset_font(font, parse_subset(options.subset)) if options.subset else None
+    if "DSIG" in font:  # a digital signature, no longer valid for the changed font
+        del font["DSIG"]
 
     if variable:
         prepared = _prepare_variable_input(font, options, old_family, frozen, warnings)
@@ -303,6 +310,7 @@ def _prepare_static_input(font, options, old_family, frozen, warnings) -> Prepar
     stem = safe_path_part(get_name(font, 6) or folder)
     if options.name:
         warnings += _long_name_warning([get_name(font, 1) or family])
+    add_letter_spacing(font, options.letter_spacing)
     path = f"{folder}/{stem}.{extension(font)}"
     return Prepared(family, frozen, warnings, {path: to_bytes(font, font.flavor)}, [])
 
@@ -314,15 +322,21 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prep
     italic = is_italic(font)
     cff2 = "CFF2" in font
     vf_bytes = to_bytes(font)
-    job_args = dict(vf_bytes=vf_bytes, family=family, formats=formats, hint=options.hint,
-                    remove_overlaps=options.remove_overlaps, subroutinize=options.subroutinize)
+    job_args = dict(vf_bytes=vf_bytes, family=family, letter_spacing=options.letter_spacing, formats=formats,
+                    hint=options.hint, remove_overlaps=options.remove_overlaps, subroutinize=options.subroutinize)
     if options.axes:
         files, jobs = {}, _axis_jobs(font, options.axes, folder, italic, job_args)
     else:
-        axes = ",".join(a.axisTag for a in font["fvar"].axes)
-        stem = f"{folder}{'-Italic' if italic else ''}[{axes}]"
-        files = _variable_files(vf_bytes, f"{folder}/variable/{stem}", formats, cff2)
         jobs = _named_instance_jobs(font, italic, job_args)
+        if cff2 and jobs:
+            jobs = []
+            warnings.append("only the variable font is built: static fonts from CFF2 (OTF) variable fonts aren't "
+                            "supported yet")
+        stem = f"{folder}{'-Italic' if italic else ''}[{_tags(a.axisTag for a in font['fvar'].axes)}]"
+        if options.letter_spacing:  # the jobs add it themselves, to their instance
+            add_letter_spacing(font, options.letter_spacing)
+            vf_bytes = to_bytes(font)
+        files = _variable_files(vf_bytes, f"{folder}/variable/{stem}", formats, cff2)
 
     own = "otf" if cff2 else "ttf"
     if not formats & {own, "woff2"}:
@@ -348,9 +362,15 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prep
     return Prepared(family, frozen, warnings, files, jobs)
 
 
+def _tags(axis_tags) -> str:
+    """Axis tags for a file name; they come from the font, so they aren't trusted."""
+    return ",".join(safe_path_part(tag) for tag in axis_tags)
+
+
 def _named_instance_jobs(font: TTFont, italic: bool, job_args: dict) -> list[Job]:
     """One static job per fvar named instance, named as the designer named it."""
     defaults = {a.axisTag: a.defaultValue for a in font["fvar"].axes}
+    weight = font["OS/2"].usWeightClass
     jobs, seen = [], set()
     for inst in font["fvar"].instances:
         loc = defaults | dict(inst.coordinates)
@@ -358,7 +378,7 @@ def _named_instance_jobs(font: TTFont, italic: bool, job_args: dict) -> list[Job
         style = normalize_style(designer_name) if designer_name else style_from_location(loc, set(), italic)
         if style not in seen:
             seen.add(style)
-            jobs.append(_static_job(loc, style, job_args))
+            jobs.append(_static_job(loc, style, weight, job_args))
     return jobs
 
 
@@ -366,23 +386,25 @@ def _axis_jobs(font: TTFont, specs: dict, folder: str, italic: bool, job_args: d
     """Jobs for --weight/--width/…: pinned combinations → static, ranges → trimmed variable."""
     fvar_axes = [a.axisTag for a in font["fvar"].axes]
     defaults = {a.axisTag: a.defaultValue for a in font["fvar"].axes}
+    weight = font["OS/2"].usWeightClass  # of a font without a weight axis
     plan = axes_mod.plan(font, specs)
     jobs = []
     for combo in plan.combos:
         if axes_mod.is_static(combo):
             loc = defaults | combo
-            jobs.append(_static_job(loc, style_from_location(loc, plan.labeled, italic), job_args))
+            style = style_from_location({"wght": weight} | loc, plan.labeled, italic)
+            jobs.append(_static_job(loc, style, weight, job_args))
         else:
             remaining = [t for t in fvar_axes if not (t in combo and not isinstance(combo[t], tuple))]
-            limits = "-".join(_describe(t, v) for t, v in combo.items())
-            stem = f"{folder}{'-Italic' if italic else ''}-{limits}[{','.join(remaining)}]"
+            limits = "-".join(safe_path_part(_describe(t, v)) for t, v in combo.items())
+            stem = f"{folder}{'-Italic' if italic else ''}-{limits}[{_tags(remaining)}]"
             jobs.append(Job(kind="variable", stem=stem, location=dict(combo), **job_args))
     return jobs
 
 
-def _static_job(loc: dict[str, float], style: str, job_args: dict) -> Job:
+def _static_job(loc: dict[str, float], style: str, weight: int, job_args: dict) -> Job:
     job = Job(kind="static", stem="", location=loc,
-              weight_class=round(loc.get("wght", 400)),
+              weight_class=round(loc.get("wght", weight)),
               width_class=width_class(loc["wdth"]) if "wdth" in loc else None, **job_args)
     _restyle(job, style)
     return job
@@ -421,6 +443,7 @@ def _variable_files(data: bytes, base: str, formats: set[str], cff2: bool) -> di
 def build_job(job: Job) -> dict[str, bytes]:
     """Run one job. Returns {relative path: bytes}."""
     font = instantiateVariableFont(load(job.vf_bytes, check=False), job.location, inplace=True)
+    add_letter_spacing(font, job.letter_spacing)
     if job.kind == "variable":
         return _variable_files(to_bytes(font), f"{job.folder}/variable/{job.stem}", job.formats, "CFF2" in font)
 
@@ -456,9 +479,7 @@ def mark_monospaced(font: TTFont) -> None:
     zero-width marks and double-width glyphs (e.g. an ffi ligature) aside - as apps
     that only list monospaced fonts check this. A designer's own setting is never
     cleared."""
-    widths = [font["hmtx"][g][0] for g in set(font.getBestCmap().values())]
-    common = max(set(widths), key=widths.count, default=0)
-    if common == 0 or not set(widths) <= {0, common, 2 * common}:
+    if not fixed_width(font):
         return
     font["post"].isFixedPitch = 1
     panose = font["OS/2"].panose
@@ -468,11 +489,7 @@ def mark_monospaced(font: TTFont) -> None:
 
 def output_paths(prepared: Prepared) -> list[str]:
     """Every path `prepared` will produce (before building), for collision checks."""
-    paths = list(prepared.files)
-    for job in prepared.jobs:
-        kinds = ["variable"] if job.kind == "variable" else ["static"]
-        paths += [f"{job.folder}/{kind}/{job.stem}" for kind in kinds]
-    return paths
+    return [*prepared.files, *(f"{job.folder}/{job.kind}/{job.stem}" for job in prepared.jobs)]
 
 
 def mint(font_bytes: bytes, options: Options | None = None) -> dict[str, bytes]:

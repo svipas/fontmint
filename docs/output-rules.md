@@ -18,13 +18,15 @@ Two inputs that would write the same path (same font twice, or two families with
 
 `--formats` applies to variable input only (default: all three).
 
-| Format  | Variable output                         | Static output (from variable)                           |
-| ------- | --------------------------------------- | ------------------------------------------------------- |
-| `ttf`   | `variable/<stem>.ttf` (`.otf` for CFF2) | `ttf-unhinted/` + `ttf-hinted/`                         |
-| `otf`   | -                                       | `otf/` (CFF, overlaps removed, subroutinized, unhinted) |
-| `woff2` | `variable/<stem>.woff2`                 | `woff2-unhinted/` + `woff2-hinted/`                     |
+| Format  | Variable output                    | Static output (from variable)                           |
+| ------- | ---------------------------------- | ------------------------------------------------------- |
+| `ttf`   | `variable/<stem>.ttf`              | `ttf-unhinted/` + `ttf-hinted/`                         |
+| `otf`   | - (`variable/<stem>.otf` for CFF2) | `otf/` (CFF, overlaps removed, subroutinized, unhinted) |
+| `woff2` | `variable/<stem>.woff2`            | `woff2-unhinted/` + `woff2-hinted/`                     |
 
 Without `ttf` or `woff2`, the default mode (no axis options) skips the variable font with a warning, and ranges are an error.
+
+A variable font with CFF2 outlines is written as `.otf` (format `otf`) and WOFF2. Static fonts can't be built from it yet: the default mode builds only the variable font and warns, and single axis values are an error.
 
 ## Hinting
 
@@ -40,7 +42,7 @@ Without `ttf` or `woff2`, the default mode (no axis options) skips the variable 
 - Variable, trimmed: `<F>[-Italic]-<limits>[<remaining axes>]` - `InterClear-wght300-700[opsz,wght].ttf`, `OpenSansX-wght300-600-Condensed[wght].ttf`.
 - Static input: the font's (renamed) PostScript name, original extension.
 
-`--name` and `--style-name` may only use ASCII letters, digits, spaces and punctuation other than `[](){}<>/%\:*?"|`, so names are valid in PostScript and as file names on every OS. Repeated spaces become one. Without `--name`, folder and file names come from names inside the font, which can't be trusted: unsafe characters become `_`, so output never leaves `--output`. A resulting PostScript name (ID 6, or a static file stem) longer than 63 characters is an error.
+`--name` and `--style-name` may only use ASCII letters, digits, spaces and punctuation other than `[](){}<>/%\:*?"|`, so names are valid in PostScript and as file names on every OS. Repeated spaces become one. Without `--name`, folder and file names come from names inside the font, which can't be trusted: unsafe characters become `_`, so output never leaves `--output`. Axis tags in file names are cleaned the same way. A resulting PostScript name (ID 6, or a static file stem) longer than 63 characters is an error.
 
 ## Style names (static fonts)
 
@@ -51,7 +53,7 @@ Named instances use the designer's subfamily name. Fonts built from axis values 
 3. extra axes, including `slnt`, that take **several** values in one run - `Opsz32`, `MONO1`, `Slnt-5` (lowercase tags are capitalized)
 4. `Italic` (italic source file, or `ital` ≥ 0.5) or `Oblique` (`slnt` ≠ 0)
 
-`Regular` is dropped whenever other words remain, for composed and designer names alike: `Condensed Regular` → `Condensed`, `Regular Italic` → `Italic`.
+`Regular` is dropped whenever other words remain, for composed and designer names alike: `Condensed Regular` → `Condensed`, `Regular Italic` → `Italic`. Two-word weights and widths become one word (`Extra Bold` → `ExtraBold`), so the `Bold` in them isn't taken for the bold style.
 
 `--style-name X` replaces the style when exactly one static font is built; italic sources get `Italic` appended (`Regular` → `Italic`).
 
@@ -67,17 +69,20 @@ Named instances use the designer's subfamily name. Fonts built from axis values 
 | `W375 Italic`    | `Family W375`      | `Italic`      | `Family` / `W375 Italic`    |
 | `Oblique`        | `Family`           | `Italic`      | `Family` / `Oblique`        |
 
-Plus ID 3 (`version;PSName`), 4 (`Family Style`), 6 (PostScript name); `usWeightClass` = the real weight (375 stays 375 even when styled `Regular`); `usWidthClass` from `wdth`; `fsSelection` bold (when the style contains `Bold`), italic, regular and oblique bits; `head.macStyle`.
+Plus ID 3 (`version;PSName`), 4 (`Family Style`), 6 (PostScript name); `usWeightClass` = the real weight (375 stays 375 even when styled `Regular`; a font without a `wght` axis keeps its own weight and weight name); `usWidthClass` from `wdth`; `fsSelection` bold (when the style contains `Bold`), italic, regular and oblique bits; `head.macStyle`.
 
-A static font is marked monospaced (`post.isFixedPitch`, and PANOSE proportion for Latin text fonts) when all its characters have one width, ignoring zero-width marks and double-width glyphs. The flag is only ever set, never cleared, so a designer's own setting stays. Family names (ID 1) longer than 31 characters produce a warning, for static fonts built from a variable font and for renamed static input, because some Windows apps cut them off.
+These names are written as Windows English records. Every other record with IDs 1–4, 6, 16–18, 21, 22 or 25 is removed, in all languages, as it would describe the variable font. Of the remaining records (copyright, license, …) the Windows ones stay; a font that has no Windows records at all keeps the ones it has.
+
+A static font built from a variable font is marked monospaced (`post.isFixedPitch`, and PANOSE proportion for Latin text fonts) when all its characters have one width, ignoring zero-width marks and double-width glyphs. The flag is only ever set, never cleared, so a designer's own setting stays. Variable output and static input keep the flag they have. Family names (ID 1) longer than 31 characters produce a warning, for static fonts built from a variable font and for renamed static input, because some Windows apps cut them off.
 
 ## Renaming (all fonts)
 
 `naming.rename_family` replaces the old family in name IDs 1, 3, 4, 6, 16, 18, 20, 21, 25 and ≥ 256, and in the CFF `FontName`, `FullName` and `FamilyName` strings of OTF fonts (replacing inside the existing strings, not re-deriving them). PostScript-style strings get the space-less family. IDs 0, 7 and 8–14 are never touched.
 
-- The old family is read from the English records first (ID 16, then ID 1), so a localized name never becomes the one that gets replaced.
-- A PostScript name that doesn't contain the family (`FooSANS-Regular` for "Foo Sans") gets the new family in front of its old suffix. Without a `-` there's no suffix to keep: the name stays and a warning says so.
+- The old family is read from the English records first (ID 16, then ID 1), so a localized name never becomes the one that gets replaced. Without ID 16, an ID 1 that also holds style words (`Acme Sans SemiBold`) is cut where the PostScript name (`AcmeSans-SemiBold`) says the family ends.
+- A font that doesn't state its family in ID 1 or 16 can't be renamed; that is an error.
+- A PostScript name that doesn't contain the family (`AcmeSANS-Regular` for "Acme Sans") gets the new family in front of its old suffix. Without a `-` there's no suffix to keep: the name stays and a warning says so.
 - Localized versions of IDs 1, 4, 16, 18 and 21 are removed: they would keep naming the original family.
 - If an identifying name still mentions the old family afterwards, a warning says so.
 
-Without `--name`, or with `--name` set to the original family, outputs keep the original family name, and a warning says they will clash with the original. A trailing ` Variable` is dropped from the output folder, from all file names and from the internal names of static fonts (`Inter Variable` → `Inter/ttf-hinted/Inter-Bold.ttf`, ID 1 `Inter` - the same names as the official static Inter). The internal names of the variable output don't change.
+Without `--name`, or with `--name` set to the original family, outputs keep the original family name, and a warning says they will clash with the original (not for static input that no option changes). A trailing ` Variable` is dropped from the output folder, from all file names and from the internal names of static fonts (`Inter Variable` → `Inter/ttf-hinted/Inter-Bold.ttf`, ID 1 `Inter` - the same names as the official static Inter). The internal names of the variable output don't change.
