@@ -225,6 +225,12 @@ class NewOptionsTest(unittest.TestCase):
         record = next(r for r in out["GSUB"].table.FeatureList.FeatureRecord if r.FeatureTag == "liga")
         self.assertEqual(record.Feature.LookupListIndex, [])
 
+    def test_language_needs_features(self):
+        with self.assertRaisesRegex(FontmintError, "add the feature, e.g. --features locl"):
+            mint(fx.static_ttf(), Options(name="X", language="rom"))
+        with self.assertRaisesRegex(FontmintError, "no forms for language 'ROM'"):  # tag upper-cased
+            mint(fx.static_ttf(), Options(name="X", features="ss01", language=" rom "))
+
     def test_freeze_and_disable_same_feature(self):
         with self.assertRaisesRegex(FontmintError, "can't be frozen and disabled"):
             mint(fx.static_ttf(), Options(name="X", features="ss01", disable="ss01"))

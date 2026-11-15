@@ -3,14 +3,23 @@ import unittest
 from fontTools.feaLib.builder import addOpenTypeFeaturesFromString
 
 from fontmint.common import FontmintError
-from fontmint.features import disable_features, freeze_features, list_features, parse_features
+from fontmint.features import (
+    disable_features,
+    feature_names,
+    freeze_features,
+    language_tags,
+    list_features,
+    parse_features,
+)
 
 from . import fixtures as fx
 
 
 class FeaturesTest(unittest.TestCase):
     def test_list(self):
-        self.assertEqual(list_features(fx.open_font(fx.static_ttf())), ["liga", "ss01"])
+        font = fx.open_font(fx.static_ttf())
+        self.assertEqual(list_features(font), ["liga", "ss01"])
+        self.assertEqual(feature_names(font), {"ss01": "Slashed zero"})
 
     def test_freeze_remaps_cmap(self):
         font = fx.open_font(fx.static_ttf())
@@ -100,6 +109,26 @@ class FreezeOrderTest(unittest.TestCase):
         for record in font["GSUB"].table.ScriptList.ScriptRecord:
             record.Script.DefaultLangSys = None
         self.assertEqual(freeze_features(font, "ss01").remapped, 2)
+
+    def test_language_forms(self):
+        fea = ("languagesystem DFLT dflt; languagesystem latn dflt; languagesystem latn ROM;"
+               "feature locl { script latn; language ROM exclude_dflt; sub I by I.ss01; } locl;"
+               "feature ss01 { sub zero by zero.ss01; } ss01;")
+        self.assertEqual(language_tags(with_features(fea)), ["ROM"])
+        with self.assertRaisesRegex(FontmintError, r"locl only has forms for some languages \(ROM\); pick one"):
+            freeze_features(with_features(fea), "locl")
+        font = with_features(fea)
+        self.assertEqual(freeze_features(font, "locl", "ROM").remapped, 1)
+        self.assertEqual(font.getBestCmap()[ord("I")], "I.ss01")
+        with self.assertRaisesRegex(FontmintError, "no forms for language 'TRK'"):
+            freeze_features(with_features(fea), "locl", "TRK")
+        font = with_features(fea)
+        records = font["GSUB"].table.FeatureList.FeatureRecord
+        for script in font["GSUB"].table.ScriptList.ScriptRecord:
+            for lang in script.Script.LangSysRecord:
+                lang.LangSys.FeatureIndex = [i for i in lang.LangSys.FeatureIndex if records[i].FeatureTag != "ss01"]
+        with self.assertRaisesRegex(FontmintError, "no ss01 for language 'ROM'"):
+            freeze_features(font, "ss01", "ROM")
 
     def test_old_mac_cmap_is_left_alone_for_high_glyph_ids(self):
         font = fx.open_font(fx.mac_cmap_ttf())

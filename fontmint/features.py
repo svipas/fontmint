@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables import otTables
 
-from .common import FontmintError
+from .common import FontmintError, get_name
 
 CONTEXTUAL_TYPES = {5, 6, 8}  # contextual, chained contextual, reverse chained
 
@@ -32,6 +32,24 @@ class FreezeResult:
 def list_features(font: TTFont, table: str = "GSUB") -> list[str]:
     records = _feature_records(font, table)
     return sorted({r.FeatureTag for r in records})
+
+
+def feature_names(font: TTFont) -> dict[str, str]:
+    """Names the font gives its stylistic sets and character variants,
+    e.g. {'ss02': 'Disambiguation'}."""
+    names: dict[str, str] = {}
+    for record in _feature_records(font, "GSUB"):
+        params = record.Feature.FeatureParams
+        name_id = getattr(params, "UINameID", None) or getattr(params, "FeatUILabelNameID", None)
+        if name_id and record.FeatureTag not in names and (name := get_name(font, name_id)):
+            names[record.FeatureTag] = "".join(c for c in name if c.isprintable())  # untrusted text from the font
+    return dict(sorted(names.items()))
+
+
+def language_tags(font: TTFont) -> list[str]:
+    """Languages the font has its own forms for, as OpenType tags, e.g. ['ROM', 'SRB']."""
+    scripts = _scripts(font["GSUB"].table) if "GSUB" in font else []
+    return sorted({lang.LangSysTag.strip() for script in scripts for lang in script.Script.LangSysRecord})
 
 
 def parse_features(features: str) -> dict[str, int]:
@@ -62,23 +80,36 @@ def parse_tags(tags: str) -> list[str]:
     return list(dict.fromkeys(t.strip() for t in tags.split(",") if t.strip()))
 
 
-def freeze_features(font: TTFont, spec: dict[str, int] | str) -> FreezeResult:
+def freeze_features(font: TTFont, spec: dict[str, int] | str, language: str = "") -> FreezeResult:
     """Make the features in `spec` ("ss01,cv47=14" or {"ss01": 1, "cv47": 14}) the
     default in the cmap, then update the font's other rules so they keep working
-    with the frozen glyphs. Returns what changed and what couldn't be done."""
+    with the frozen glyphs. `language` (an OpenType tag such as "ROM") freezes the
+    forms the font shows for that language. Returns what changed and what couldn't be done."""
     if isinstance(spec, str):
         spec = parse_features(spec)
     missing = [t for t in spec if t not in list_features(font)]
     if missing:
         raise FontmintError(f"font has no feature(s): {', '.join(missing)} (--list-features shows which it has)")
     gsub = font["GSUB"].table
+    if language and language not in language_tags(font):
+        raise FontmintError(f"font has no forms for language '{language}' (--list-features shows its languages)")
+    for tag in spec:
+        if _feature_lookups(gsub, tag, language):
+            continue
+        if language:
+            raise FontmintError(f"font has no {tag} for language '{language}'")
+        records = gsub.FeatureList.FeatureRecord
+        if languages := [lang for lang in language_tags(font) if any(
+                records[i].FeatureTag == tag for i in _language_features(gsub, lang))]:
+            raise FontmintError(f"{tag} only has forms for some languages ({', '.join(languages)}); "
+                                "pick one with --language")
     lookups = gsub.LookupList.Lookup
     position = _run_positions(gsub)
     result = FreezeResult()
 
     lookup_value: dict[int, tuple[str, int]] = {}
     for tag, value in spec.items():
-        for index in _feature_lookups(gsub, tag):
+        for index in _feature_lookups(gsub, tag, language):
             lookup_value.setdefault(index, (tag, value))
     maps: list[tuple[int, dict[str, str]]] = []  # (run position, glyph → glyph), in the order engines run them
     partial: set[str] = set()
@@ -172,17 +203,28 @@ def _feature_records(font: TTFont, table: str) -> list:
     return font[table].table.FeatureList.FeatureRecord
 
 
-def _feature_lookups(gsub, tag: str) -> list[int]:
-    """Lookup indices of a feature, from the feature records that scripts use by
-    default (all records with the tag if none is referenced by default)."""
+def _feature_lookups(gsub, tag: str, language: str = "") -> list[int]:
+    """Lookup indices of a feature, from the feature records of `language`, or else
+    from those that scripts use by default (all records with the tag if the font
+    has no default language system)."""
     records = gsub.FeatureList.FeatureRecord
-    by_default = set()
-    for script in gsub.ScriptList.ScriptRecord if gsub.ScriptList else []:
-        if script.Script.DefaultLangSys:  # optional in the spec
-            by_default.update(script.Script.DefaultLangSys.FeatureIndex)
     indices = [i for i, r in enumerate(records) if r.FeatureTag == tag]
-    chosen = [i for i in indices if i in by_default] or indices
-    return sorted({lookup for i in chosen for lookup in records[i].Feature.LookupListIndex})
+    if language:
+        used = _language_features(gsub, language)
+        indices = [i for i in indices if i in used]
+    elif defaults := [s.Script.DefaultLangSys for s in _scripts(gsub) if s.Script.DefaultLangSys]:  # optional
+        used = {i for d in defaults for i in d.FeatureIndex}
+        indices = [i for i in indices if i in used]
+    return sorted({lookup for i in indices for lookup in records[i].Feature.LookupListIndex})
+
+
+def _scripts(gsub) -> list:
+    return gsub.ScriptList.ScriptRecord if gsub.ScriptList else []
+
+
+def _language_features(gsub, language: str) -> set[int]:
+    return {i for script in _scripts(gsub) for lang in script.Script.LangSysRecord
+            if lang.LangSysTag.strip() == language for i in lang.LangSys.FeatureIndex}
 
 
 def _subtables(lookup):
@@ -447,7 +489,7 @@ def _count_stale(gsub, position, glyph_map: dict[str, str], first_change: dict[s
 def _default_lookups(gsub) -> set[int]:
     records = gsub.FeatureList.FeatureRecord
     lookups = set()
-    for script in gsub.ScriptList.ScriptRecord if gsub.ScriptList else []:
+    for script in _scripts(gsub):
         if langsys := script.Script.DefaultLangSys:
             for feature_index in langsys.FeatureIndex:
                 lookups.update(records[feature_index].Feature.LookupListIndex)

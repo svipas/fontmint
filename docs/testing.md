@@ -37,7 +37,7 @@ Only the standard library's `unittest` is used - don't add pytest or other test 
 
 `hinted=True` adds dummy `fpgm`/`prep`/`cvt ` tables and glyph programs: static passthrough must keep them byte for byte, and the `*-unhinted/` outputs of a hinted variable font must have none.
 
-The Latin fixtures have `ss01` (`zero → zero.ss01`, `I → I.ss01`), an unfreezable `liga` ligature, and a copyright/trademark containing "Test Sans", so renaming bugs show up. Variation deltas are simple: bold adds +80 to the right edge at wght 900 (so +48 at 700), condensed −100.
+The Latin fixtures have `ss01` ("Slashed zero": `zero → zero.ss01`, `I → I.ss01`), an unfreezable `liga` ligature, and a copyright/trademark containing "Test Sans", so renaming bugs show up. Variation deltas are simple: bold adds +80 to the right edge at wght 900 (so +48 at 700), condensed −100.
 
 Results are cached (`functools.cache`); open them with `fixtures.open_font(data)` so tests never share a mutable `TTFont`.
 

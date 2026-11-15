@@ -41,7 +41,7 @@ LATIN = {
 }
 LATIN_CMAP = {0x20: "space", 0x30: "zero", 0x49: "I", 0x48: "H", 0x4F: "O", 0x6F: "o", 0x78: "x", 0x6E: "n"}
 LATIN_FEATURES = """
-feature ss01 { sub zero by zero.ss01; sub I by I.ss01; } ss01;
+feature ss01 { featureNames { name "Slashed zero"; }; sub zero by zero.ss01; sub I by I.ss01; } ss01;
 feature liga { sub I zero by H; } liga;
 """
 # A font ttfautohint can't hint: no Latin reference glyphs at all.

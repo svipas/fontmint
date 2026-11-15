@@ -65,6 +65,15 @@ OpenSans[wdth,wght].ttf
   instances: Light, Regular, SemiBold, Bold, ExtraBold, Condensed Light, Condensed Regular, …
   features:  aalt ccmp dnom frac liga … ss01 ss02 ss03 ss04 subs sups tnum zero
   positioning: mark mkmk
+  languages: APPH CAT IPPH MAH MKD MOL NAV ROM SRB
+```
+
+If the font names its features, the names are listed under them, so you can see what each one changes:
+
+```text
+  named:     cv01  Alternate one
+             …
+             ss02  Disambiguation
 ```
 
 ### Static fonts: freeze and rename only
@@ -91,6 +100,16 @@ Some fonts build accented letters from a base letter and a separate accent; thos
 ```bash
 fontmint JetBrainsMono*.ttf --disable calt --name "JetBrains Mono Flat"
 ```
+
+### Language-specific forms
+
+Many fonts draw some letters differently for one language, but apps only show those forms when the text is marked as that language. `--language` makes them the default. Open Sans, for example, has Romanian `ș ț` with a comma below instead of `ş ţ` with a cedilla:
+
+```bash
+fontmint 'OpenSans[wdth,wght].ttf' --features locl --language ROM --name "Open Sans RO"
+```
+
+`--list-features` shows which languages a font has forms for. The tags are OpenType language tags, such as `ROM` for Romanian or `SRB` for Serbian.
 
 ### Variable fonts: build everything
 
@@ -171,8 +190,9 @@ Fonts without Latin letters, such as icon fonts, can't be hinted automatically; 
 
 | Option                    | Description                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------- |
-| `--list-features`         | Show the font's axes, named instances and features, then exit.               |
+| `--list-features`         | Show the font's axes, named instances, features and languages, then exit.    |
 | `--features ss02,zero`    | Features to freeze; `cv47=2` picks a feature's second alternate.             |
+| `--language ROM`          | Freeze the forms the font has for this language (with `--features locl`).    |
 | `--disable calt,liga`     | Features to turn off.                                                        |
 | `--name "Inter Clear"`    | New family name. Recommended, so your build doesn't clash with the original. |
 | `--weight 400,700`        | Weight axis (`wght`).                                                        |

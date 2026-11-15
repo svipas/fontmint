@@ -32,7 +32,9 @@ from .convert import autohint, has_hinting, strip_hinting, ttf_to_otf
 from .features import (
     FreezeResult,
     disable_features,
+    feature_names,
     freeze_features,
+    language_tags,
     list_features,
     parse_features,
     parse_tags,
@@ -66,6 +68,8 @@ class Options:
 
     features:    features to freeze, "ss01,zero" or ["ss01", "zero"]; "cv47=14" picks the
                  14th alternate of a feature that offers several.
+    language:    freeze the forms the font has for this language, an OpenType tag such
+                 as "ROM" (Romanian ș ț with a comma below); used with features="locl".
     disable:     features to turn off, e.g. "liga,calt" (GSUB or GPOS).
     name:        new family name.
     axes:        axis tag → values, e.g. {"wght": "400,700", "wdth": [75, (75, 100)]}.
@@ -81,6 +85,7 @@ class Options:
     """
 
     features: str | list[str] | dict[str, int] = ""
+    language: str = ""
     disable: str | list[str] = ""
     name: str = ""
     axes: dict[str, object] = field(default_factory=dict)
@@ -97,12 +102,18 @@ class Options:
             self.features = ",".join(self.features or [])
         if not isinstance(self.disable, str):
             self.disable = ",".join(self.disable or [])
+        self.language = self.language.strip().upper()
         self.name = " ".join(self.name.split())
         self.style_name = " ".join(self.style_name.split())
         if isinstance(self.formats, str):
             self.formats = {f.strip() for f in self.formats.split(",") if f.strip()}
 
     def validate(self) -> None:
+        if self.language:
+            if not 1 <= len(self.language) <= 4:
+                raise FontmintError(f"'{self.language}' isn't a language tag; tags have 1-4 letters, e.g. ROM, SRB")
+            if not parse_features(self.features):
+                raise FontmintError("--language picks which forms to freeze; add the feature, e.g. --features locl")
         if self.name:
             check_name(self.name, "--name")
         if self.style_name:
@@ -123,6 +134,8 @@ class FontInfo:
     features: list[str]                                    # substitution (GSUB) feature tags
     italic: bool
     positioning: list[str] = field(default_factory=list)  # positioning (GPOS) feature tags, e.g. kern
+    feature_names: dict[str, str] = field(default_factory=dict)  # e.g. {"ss02": "Disambiguation"}
+    languages: list[str] = field(default_factory=list)  # languages with their own forms, e.g. ["ROM", "SRB"]
 
 
 @dataclass
@@ -174,7 +187,7 @@ def inspect(font_bytes: bytes) -> FontInfo:
         for inst in font["fvar"].instances:
             instances.append((get_name(font, inst.subfamilyNameID) or "?", dict(inst.coordinates)))
     return FontInfo(family_name(font), variable, axes, instances, list_features(font), is_italic(font),
-                    list_features(font, "GPOS"))
+                    list_features(font, "GPOS"), feature_names(font), language_tags(font))
 
 
 
@@ -206,7 +219,7 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
 
     frozen = 0
     if spec:
-        result = freeze_features(font, spec)
+        result = freeze_features(font, spec, options.language)
         frozen = result.remapped
         warnings += _freeze_warnings(options.features, result)
 

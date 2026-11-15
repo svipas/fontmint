@@ -26,6 +26,9 @@ Examples:
 
     # a coding font without ligatures (JetBrains Mono keeps them in calt)
     fontmint JetBrainsMono*.ttf --disable calt --name "JetBrains Mono Flat"
+
+    # Romanian forms (ș ț with a comma below) as the default
+    fontmint 'OpenSans[wdth,wght].ttf' --features locl --language ROM --name "Open Sans RO"
 """
 
 from __future__ import annotations
@@ -122,8 +125,12 @@ def list_features(path: Path) -> None:
         print(f"  axes:      {axes}")
         print(f"  instances: {', '.join(name for name, _ in info.instances) or '-'}")
     print(f"  features:  {' '.join(info.features) or '-'}")
+    for i, (tag, name) in enumerate(info.feature_names.items()):
+        print(f"  {'named:' if i == 0 else '':<10} {tag}  {name}")
     if info.positioning:
         print(f"  positioning: {' '.join(info.positioning)}")
+    if info.languages:
+        print(f"  languages: {' '.join(info.languages)}")
 
 
 def package_version() -> str:
@@ -148,10 +155,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="font file(s): variable or static TTF/OTF/WOFF/WOFF2")
     p.add_argument("--version", action="version", version=f"%(prog)s {package_version()}")
     p.add_argument("--list-features", action="store_true",
-                   help="show the font's axes, named instances and features, then exit")
+                   help="show the font's axes, named instances, features and languages, then exit")
     p.add_argument("--features", default="", metavar="TAGS",
                    help="features to make the default (freeze), e.g. ss02,zero; for a feature with several "
                         "alternates, add a number: cv47=2 picks the second")
+    p.add_argument("--language", default="", metavar="TAG",
+                   help="freeze the forms the font has for a language, e.g. --features locl --language ROM for "
+                        "Romanian ș ț with a comma below (--list-features shows the font's languages)")
     p.add_argument("--disable", default="", metavar="TAGS",
                    help="features to turn off, e.g. calt,liga for no ligatures (--list-features shows which a font has)")
     p.add_argument("--name", default="", metavar="NAME",
@@ -192,6 +202,7 @@ def run(args: argparse.Namespace) -> None:
 
     options = core.Options(
         features=args.features,
+        language=args.language,
         disable=args.disable,
         name=args.name,
         axes=collect_axes(args),
@@ -224,7 +235,8 @@ def run(args: argparse.Namespace) -> None:
             log(f"  warning: {out / prepared.folder} already exists; files from earlier runs are kept unless this run "
                 "replaces them")
         if options.features:
-            log(f"  froze {options.features}: {prepared.frozen} characters remapped")
+            language = f" ({options.language})" if options.language else ""
+            log(f"  froze {options.features}{language}: {prepared.frozen} characters remapped")
         if options.disable:
             log(f"  disabled {options.disable}")
         for w in prepared.warnings:
