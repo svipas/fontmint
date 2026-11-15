@@ -1,7 +1,7 @@
 [project]
 name = "fontmint"
 version = "0.1.0"
-description = "Freeze OpenType features and rename fonts; export variable fonts as variable + static TTF (hinted and unhinted), OTF and WOFF2 at any axis value"
+description = "Make your own builds of fonts: freeze OpenType features (make stylistic sets the default), rename the family, and export variable fonts as variable and static TTF, OTF and WOFF2 at any axis value"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

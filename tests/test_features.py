@@ -30,11 +30,11 @@ class FeaturesTest(unittest.TestCase):
     def test_spaces_and_trailing_commas(self):
         font = fx.open_font(fx.static_ttf())
         self.assertEqual(freeze_features(font, " ss01 , "), 2)
-        with self.assertRaisesRegex(FontmintError, r"feature\(s\): ss02$"):
+        with self.assertRaisesRegex(FontmintError, r"feature\(s\): ss02 \("):
             freeze_features(font, "ss01, ss02")
 
     def test_missing_feature(self):
-        with self.assertRaisesRegex(FontmintError, "no GSUB feature.*ss02"):
+        with self.assertRaisesRegex(FontmintError, "no feature.*ss02"):
             freeze_features(fx.open_font(fx.static_ttf()), "ss01,ss02")
 
 

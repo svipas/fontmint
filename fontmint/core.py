@@ -6,7 +6,7 @@ be used from the CLI, from other Python code, or in a browser (Pyodide).
 Static fonts (TTF, OTF, WOFF, WOFF2) pass through: features are frozen and the
 family renamed, nothing else changes - same format, hinting kept, no extra files.
 
-Variable fonts give:
+Variable fonts produce:
   - the variable font itself (features frozen, renamed, otherwise unchanged)
     plus a static font for every named instance - when no axis options are given;
   - otherwise exactly what the axis options ask for: pinned values → static fonts,
@@ -91,7 +91,7 @@ class Options:
             if bad := set(self.formats) - set(FORMATS):
                 raise FontmintError(f"unknown format(s): {', '.join(sorted(bad))} (choose from {', '.join(FORMATS)})")
             if not self.formats:
-                raise FontmintError("no formats selected")
+                raise FontmintError(f"no formats selected (choose from {', '.join(FORMATS)})")
 
 
 @dataclass
@@ -168,15 +168,16 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
     if options.features:
         frozen = freeze_features(font, options.features)
         if frozen == 0:
-            warnings.append(f"'{options.features}' changed no characters: only single and alternate "
-                            "substitutions (ssXX, cvXX, zero, …) can be frozen")
+            warnings.append(f"'{options.features}' changed no characters: only features that swap one glyph "
+                            "for another (ssXX, cvXX, zero, …) can be frozen, not ligatures or contextual features")
     if options.name:
         if options.name in (old_family, old_family.removesuffix(" Variable")):
-            warnings.append("--name is the original family name; the build will clash with the original")
+            warnings.append("--name is the original family name; the build will clash with the original font")
         rename_family(font, old_family, options.name)
         check_ps_length(get_name(font, 6) or "")
     elif variable or options.features:
-        warnings.append("no --name given; the output keeps the original family name and will clash with it")
+        warnings.append("no --name given; the output keeps the original family name and will clash with the "
+                        "original font (add --name to avoid this)")
 
     if variable:
         return _prepare_variable_input(font, options, old_family, frozen, warnings)
@@ -217,7 +218,7 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prep
 
     own = "otf" if cff2 else "ttf"
     if not formats & {own, "woff2"}:
-        hint = f"variable fonts are written as {own}/woff2 - add {own} or woff2 to formats"
+        hint = f"variable fonts are written as {own}/woff2 - add {own} or woff2 to --formats"
         if any(j.kind == "variable" for j in jobs):
             raise FontmintError(f"ranges make variable fonts, but {hint}")
         if not options.axes:
@@ -227,10 +228,11 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prep
     if options.style_name:
         if len(statics) != 1:
             raise FontmintError("--style-name only works when exactly one static font is built "
-                                f"(this would build {len(statics)})")
+                                f"(this would build {len(statics)}; give each axis option a single value)")
         _restyle(statics[0], apply_style_name(options.style_name, italic))
     if statics and cff2:
-        raise FontmintError("static fonts from CFF2 (OTF) variable fonts aren't supported yet")
+        raise FontmintError("static fonts from CFF2 (OTF) variable fonts aren't supported yet; "
+                            "use the font's TrueType (.ttf) version if there is one")
     stems = [j.stem for j in jobs]
     if dupes := sorted({s for s in stems if stems.count(s) > 1}):
         raise FontmintError(f"several outputs would get the same name: {', '.join(dupes)}")

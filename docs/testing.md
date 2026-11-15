@@ -41,7 +41,7 @@ Results are cached (`functools.cache`); open them with `fixtures.open_font(data)
 
 ## Proving a refactor doesn't change outputs
 
-Unit tests check behavior; for refactors also compare real outputs before and after. Build with the old code into `before/`, with the new code into `after/`, then compare every table except `head` (timestamps/checksums always change):
+Unit tests check behavior. For refactors, also compare real outputs before and after. Build with the old code into `before/`, with the new code into `after/`, then compare every table except `head` (timestamps/checksums always change):
 
 ```python
 from pathlib import Path

@@ -31,7 +31,7 @@ def parse_spec(spec) -> list:
     if isinstance(spec, str):
         items = [s.strip() for s in spec.split(",") if s.strip()]
         if not items:
-            raise FontmintError("empty axis value")
+            raise FontmintError("empty axis value (use a number, MIN:MAX or 'all')")
         return [_parse_item(i) for i in items]
     raise FontmintError(f"unsupported axis value: {spec!r}")
 
@@ -80,12 +80,13 @@ def plan(font: TTFont, specs: dict[str, object]) -> Plan:
             if item == "all":
                 named = sorted({i.coordinates[tag] for i in fvar.instances if tag in i.coordinates})
                 if not named:
-                    raise FontmintError(f"font has no named instances on the '{tag}' axis")
+                    raise FontmintError(f"font has no named instances on the '{tag}' axis; "
+                                       "give values instead of 'all'")
                 values += named
                 continue
             for v in item if isinstance(item, tuple) else (item,):
                 if not a.minValue <= v <= a.maxValue:
-                    raise FontmintError(f"{tag} {v:g} outside the axis range {a.minValue:g}–{a.maxValue:g}")
+                    raise FontmintError(f"{tag} {v:g} is outside the axis range {a.minValue:g}–{a.maxValue:g}")
             values.append(item)
         expanded[tag] = list(dict.fromkeys(values))
 

@@ -29,7 +29,7 @@ def freeze_features(font: TTFont, features: str) -> int:
     tags = parse_features(features)
     missing = [f for f in tags if f not in list_features(font)]
     if missing:
-        raise FontmintError(f"font has no GSUB feature(s): {', '.join(missing)}")
+        raise FontmintError(f"font has no feature(s): {', '.join(missing)} (--list-features shows which it has)")
     before = {u: g for t in font["cmap"].tables for u, g in t.cmap.items()}
     opts = SimpleNamespace(
         inpath="", outpath="unused", features=",".join(tags), script=None, lang=None,
