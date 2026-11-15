@@ -261,14 +261,15 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prep
     formats = set(options.formats) if options.formats is not None else set(FORMATS)
     italic = is_italic(font)
     cff2 = "CFF2" in font
-    job_args = dict(vf_bytes=to_bytes(font), family=family, formats=formats, hint=options.hint,
+    vf_bytes = to_bytes(font)
+    job_args = dict(vf_bytes=vf_bytes, family=family, formats=formats, hint=options.hint,
                     remove_overlaps=options.remove_overlaps, subroutinize=options.subroutinize)
     if options.axes:
         files, jobs = {}, _axis_jobs(font, options.axes, folder, italic, job_args)
     else:
         axes = ",".join(a.axisTag for a in font["fvar"].axes)
         stem = f"{folder}{'-Italic' if italic else ''}[{axes}]"
-        files = _variable_files(font, f"{folder}/variable/{stem}", formats, cff2)
+        files = _variable_files(vf_bytes, f"{folder}/variable/{stem}", formats, cff2)
         jobs = _named_instance_jobs(font, italic, job_args)
 
     own = "otf" if cff2 else "ttf"
@@ -353,46 +354,48 @@ def _describe(tag: str, v) -> str:
     return axis_label(tag, v)
 
 
-def _variable_files(font: TTFont, base: str, formats: set[str], cff2: bool) -> dict[str, bytes]:
-    """Variable output: no hinting, no outline conversion - only lossless WOFF2."""
+def _variable_files(data: bytes, base: str, formats: set[str], cff2: bool) -> dict[str, bytes]:
+    """Variable output from compiled font bytes: no hinting, no outline conversion -
+    only lossless WOFF2."""
     files = {}
     own = "otf" if cff2 else "ttf"
     if own in formats:
-        files[f"{base}.{own}"] = to_bytes(font)
+        files[f"{base}.{own}"] = data
     if "woff2" in formats:
-        files[f"{base}.woff2"] = to_bytes(font, "woff2")
+        files[f"{base}.woff2"] = to_bytes(load(data, recalc=False, check=False), "woff2")
     return files
-
 
 
 def build_job(job: Job) -> dict[str, bytes]:
     """Run one job. Returns {relative path: bytes}."""
-    font = instantiateVariableFont(load(job.vf_bytes, check=False), job.location)
+    font = instantiateVariableFont(load(job.vf_bytes, check=False), job.location, inplace=True)
     if job.kind == "variable":
-        return _variable_files(font, f"{job.folder}/variable/{job.stem}", job.formats, "CFF2" in font)
+        return _variable_files(to_bytes(font), f"{job.folder}/variable/{job.stem}", job.formats, "CFF2" in font)
 
     stem = set_static_names(font, job.family, job.style, job.weight_class, job.width_class)
     mark_monospaced(font)
+    # Each output starts from these bytes: a font loaded from bytes copies the tables
+    # it doesn't touch instead of compiling them again (GSUB/GPOS take seconds).
+    data = to_bytes(font)
+    unhinted = to_bytes(strip_hinting(load(data, check=False)))
     # A hinted source keeps the designer's hints (adjusted to the instance by the
     # instancer); ttfautohint is only used for sources without hinting.
-    wants_hinted = job.hint and bool({"ttf", "woff2"} & job.formats)
-    unhinted = strip_hinting(font)
-    if has_hinting(font):
-        hinted = font if wants_hinted else None
-    else:
-        hinted = autohint(unhinted) if wants_hinted else None
+    hinted = None
+    if job.hint and {"ttf", "woff2"} & job.formats:
+        hinted = data if has_hinting(font) else autohint(unhinted)
 
     files = {}
     if "ttf" in job.formats:
-        files[f"{job.folder}/ttf-unhinted/{stem}.ttf"] = to_bytes(unhinted)
+        files[f"{job.folder}/ttf-unhinted/{stem}.ttf"] = unhinted
         if hinted:
-            files[f"{job.folder}/ttf-hinted/{stem}.ttf"] = to_bytes(hinted)
+            files[f"{job.folder}/ttf-hinted/{stem}.ttf"] = hinted
     if "otf" in job.formats:
-        files[f"{job.folder}/otf/{stem}.otf"] = to_bytes(ttf_to_otf(unhinted, job.remove_overlaps, job.subroutinize))
+        otf = ttf_to_otf(load(unhinted, check=False), job.remove_overlaps, job.subroutinize)
+        files[f"{job.folder}/otf/{stem}.otf"] = to_bytes(otf)
     if "woff2" in job.formats:
-        files[f"{job.folder}/woff2-unhinted/{stem}.woff2"] = to_bytes(unhinted, "woff2")
+        files[f"{job.folder}/woff2-unhinted/{stem}.woff2"] = to_bytes(load(unhinted, check=False), "woff2")
         if hinted:
-            files[f"{job.folder}/woff2-hinted/{stem}.woff2"] = to_bytes(hinted, "woff2")
+            files[f"{job.folder}/woff2-hinted/{stem}.woff2"] = to_bytes(load(hinted, check=False), "woff2")
     return files
 
 
