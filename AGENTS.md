@@ -96,7 +96,8 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 - `README.md` is for users and contributors: what fontmint does, how to install and use it, options, outputs.
 - `docs/` holds decisions, constraints and traps that are hard to see from the code. Before adding a paragraph, ask what a maintainer would get wrong without it. If reading the code answers the question, leave it out.
 - When a documented rule changes, rewrite or remove the old text instead of appending a new account.
-- Format Markdown with `npx --yes oxfmt README.md AGENTS.md docs` (`--check` to verify without writing).
+- `CHANGELOG.md` lists what changed for users, per version. Add a line under the next version for every change a user can notice.
+- Format Markdown with `npx --yes oxfmt README.md AGENTS.md CHANGELOG.md docs` (`--check` to verify without writing).
 
 ## Commits
 

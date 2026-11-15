@@ -1,6 +1,8 @@
 import unittest
 
-from fontmint import FontmintError, Options, mint
+from fontTools.ttLib import newTable
+
+from fontmint import FontmintError, Options, mint, prepare
 from fontmint.subset import parse_subset, subset_font
 
 from . import fixtures as fx
@@ -24,12 +26,21 @@ class SubsetTest(unittest.TestCase):
     def test_keeps_characters_features_and_names(self):
         font = fx.open_font(fx.static_ttf())
         names = sorted({(n.nameID, n.platformID, n.langID) for n in font["name"].names})
-        self.assertEqual(subset_font(font, parse_subset("U+0030,U+0049")), (2, 8))
+        self.assertEqual(subset_font(font, parse_subset("U+0030,U+0049")), (2, 8, []))
         self.assertEqual(set(font.getBestCmap()), {0x30, 0x49})
         self.assertIn("zero.ss01", font.getGlyphOrder())  # reachable through ss01
         self.assertNotIn("x", font.getGlyphOrder())
         self.assertEqual(sorted({(n.nameID, n.platformID, n.langID) for n in font["name"].names}), names)
         self.assertIn("ss01", {r.FeatureTag for r in font["GSUB"].table.FeatureList.FeatureRecord})
+
+    def test_dropped_tables_are_reported_not_logged(self):
+        font = fx.open_font(fx.static_ttf())
+        font["Xtra"] = newTable("Xtra")  # a table fontTools doesn't know, so it can't subset it
+        font["Xtra"].data = b"\0" * 4
+        with self.assertNoLogs(level="WARNING"):  # nothing reaches the terminal
+            prepared = prepare(fx._save(font), Options(name="Mint Sans", subset="U+0030"))
+        self.assertTrue(any("dropped the tables Xtra" in w for w in prepared.warnings), prepared.warnings)
+        self.assertEqual(prepared.subset, (1, 8))
 
     def test_nothing_left(self):
         with self.assertRaisesRegex(FontmintError, "none of the characters"):

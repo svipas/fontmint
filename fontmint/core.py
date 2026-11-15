@@ -257,7 +257,12 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
 
     if options.line_height is not None:
         set_line_height(font, options.line_height)
-    subset = subset_font(font, parse_subset(options.subset)) if options.subset else None
+    subset = None
+    if options.subset:
+        *subset, dropped = subset_font(font, parse_subset(options.subset))
+        if dropped:
+            warnings.append(f"subsetting dropped the tables {', '.join(dropped)}: they can't be subset, or nothing "
+                            "was left in them")
     if "DSIG" in font:  # a digital signature, no longer valid for the changed font
         del font["DSIG"]
 
@@ -265,7 +270,7 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
         prepared = _prepare_variable_input(font, options, old_family, frozen, warnings)
     else:
         prepared = _prepare_static_input(font, options, old_family, frozen, warnings)
-    prepared.subset = subset
+    prepared.subset = tuple(subset) if subset else None
     return prepared
 
 

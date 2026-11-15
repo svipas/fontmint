@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from fontTools.misc.loggingTools import CapturingLogHandler
 from fontTools.subset import Options as SubsetOptions
 from fontTools.subset import Subsetter
 from fontTools.ttLib import TTFont
@@ -44,12 +45,12 @@ def parse_subset(spec: str) -> set[int]:
     return codepoints
 
 
-def subset_font(font: TTFont, codepoints: set[int]) -> tuple[int, int]:
+def subset_font(font: TTFont, codepoints: set[int]) -> tuple[int, int, list[str]]:
     """Keep only the characters in `codepoints`, and the glyphs they need (including
     alternates their features can reach). Names, hinting, glyph names and every
     feature that still has glyphs stay. Tables fontTools can't subset are dropped
     (e.g. bitmaps, Apple's morx), as they would point at the wrong glyphs.
-    Returns (characters kept, characters before)."""
+    Returns (characters kept, characters before, tables dropped)."""
     before = set(font.getBestCmap() or {})
     kept = before & codepoints
     if not kept:
@@ -65,8 +66,10 @@ def subset_font(font: TTFont, codepoints: set[int]) -> tuple[int, int]:
     options.legacy_kern = True
     subsetter = Subsetter(options)
     subsetter.populate(unicodes=kept)
+    tables = set(font.keys())
     try:
-        subsetter.subset(font)
+        with CapturingLogHandler("fontTools.subset", "WARNING"):  # it logs each table it drops; we return them
+            subsetter.subset(font)
     except Exception as e:  # a table fontTools can't handle
         raise FontmintError(f"this font can't be subset ({type(e).__name__}: {e})") from e
-    return len(kept), len(before)
+    return len(kept), len(before), sorted(tables - set(font.keys()) - {"DSIG"})
