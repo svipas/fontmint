@@ -33,7 +33,7 @@ The CLI writes nothing until every input is prepared and every job has succeeded
 | `Options`  | What to build: `features`, `name`, `axes` (tag → spec), `style_name`, `formats` (`None` = all), native-step switches. Strings or lists/sets are accepted for `features` and `formats`.                          |
 | `Prepared` | Result of `prepare`: `files` ready now, `jobs` still to run, `frozen` count, `warnings`, `family`.                                                                                                              |
 | `Job`      | One output from a variable font. `kind` is `"static"` (every axis pinned) or `"variable"` (some axes trimmed). Carries the frozen + renamed variable font as `vf_bytes`, so it is self-contained and picklable. |
-| `FontInfo` | Returned by `inspect()` for `--list-features`.                                                                                                                                                                  |
+| `FontInfo` | Returned by `inspect()` for `--info`.                                                                                                                                                                           |
 
 `FontmintError` (in `common.py`) is the only exception callers should expect. Errors from libraries inside a build job (e.g. ttfautohint) are converted to it; the CLI prints `fontmint: error: …` and exits with code 1.
 

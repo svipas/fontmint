@@ -55,7 +55,7 @@ Variable font files often have brackets in their names, like `OpenSans[wdth,wght
 ### Inspect a font
 
 ```bash
-fontmint 'OpenSans[wdth,wght].ttf' --list-features
+fontmint 'OpenSans[wdth,wght].ttf' --info
 ```
 
 ```text
@@ -109,7 +109,7 @@ Many fonts draw some letters differently for one language, but apps only show th
 fontmint 'OpenSans[wdth,wght].ttf' --features locl --language ROM --name "Open Sans RO"
 ```
 
-`--list-features` shows which languages a font has forms for. The tags are OpenType language tags, such as `ROM` for Romanian or `SRB` for Serbian.
+`--info` shows which languages a font has forms for. The tags are OpenType language tags, such as `ROM` for Romanian or `SRB` for Serbian.
 
 ### Variable fonts: build everything
 
@@ -190,7 +190,7 @@ Fonts without Latin letters, such as icon fonts, can't be hinted automatically; 
 
 | Option                    | Description                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------- |
-| `--list-features`         | Show the font's axes, named instances, features and languages, then exit.    |
+| `--info`                  | Show the font's axes, named instances, features and languages, then exit.    |
 | `--features ss02,zero`    | Features to freeze; `cv47=2` picks a feature's second alternate.             |
 | `--language ROM`          | Freeze the forms the font has for this language (with `--features locl`).    |
 | `--disable calt,liga`     | Features to turn off.                                                        |

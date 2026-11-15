@@ -103,7 +103,7 @@ def rename_family(font: TTFont, old: str, new: str) -> list[str]:
     if leftovers:
         ids = ", ".join(map(str, leftovers))
         warnings.append(f"some of the font's internal names (name ID {ids}) still contain '{old}'; "
-                        "check the result with --list-features or a font viewer")
+                        "check the result with --info or a font viewer")
     return warnings
 
 

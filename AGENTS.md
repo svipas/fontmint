@@ -70,7 +70,7 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 ## Setup and running
 
 - `python3 -m venv .venv && .venv/bin/pip install -e .` sets up a development install.
-- `.venv/bin/fontmint FONT --list-features` shows axes, named instances and features.
+- `.venv/bin/fontmint FONT --info` shows axes, named instances, features and languages.
 - `.venv/bin/fontmint FONT --features ss01 --name "X" --output /tmp/x` runs the tool. Write test output outside the repo; `dist/` is gitignored but easy to forget.
 
 ## Verifying

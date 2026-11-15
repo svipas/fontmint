@@ -89,10 +89,10 @@ def freeze_features(font: TTFont, spec: dict[str, int] | str, language: str = ""
         spec = parse_features(spec)
     missing = [t for t in spec if t not in list_features(font)]
     if missing:
-        raise FontmintError(f"font has no feature(s): {', '.join(missing)} (--list-features shows which it has)")
+        raise FontmintError(f"font has no feature(s): {', '.join(missing)} (--info shows which it has)")
     gsub = font["GSUB"].table
     if language and language not in language_tags(font):
-        raise FontmintError(f"font has no forms for language '{language}' (--list-features shows its languages)")
+        raise FontmintError(f"font has no forms for language '{language}' (--info shows its languages)")
     for tag in spec:
         if _feature_lookups(gsub, tag, language):
             continue
@@ -180,7 +180,7 @@ def disable_features(font: TTFont, tags: list[str]) -> None:
     feature variations). The feature records stay, so all indices remain valid."""
     present = set(list_features(font, "GSUB")) | set(list_features(font, "GPOS"))
     if missing := [t for t in tags if t not in present]:
-        raise FontmintError(f"font has no feature(s): {', '.join(missing)} (--list-features shows which it has)")
+        raise FontmintError(f"font has no feature(s): {', '.join(missing)} (--info shows which it has)")
     for table_tag in ("GSUB", "GPOS"):
         records = _feature_records(font, table_tag)
         for index, record in enumerate(records):

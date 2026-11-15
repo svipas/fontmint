@@ -1,8 +1,8 @@
 """fontmint command line - arguments, files and parallel builds around fontmint.core.
 
 Examples:
-    # show axes, named instances and features
-    fontmint InterVariable.ttf --list-features
+    # show axes, named instances, features and languages
+    fontmint InterVariable.ttf --info
 
     # variable font + every named instance, in every format
     fontmint InterVariable*.ttf --features ss02 --name "Inter Clear"
@@ -112,7 +112,7 @@ def collect_axes(args: argparse.Namespace) -> dict[str, str]:
     return axes
 
 
-def list_features(path: Path) -> None:
+def show_info(path: Path) -> None:
     try:
         info = core.inspect(read_font(path))
     except FontmintError as e:
@@ -154,16 +154,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("fonts", nargs="+", type=Path, metavar="FONT",
                    help="font file(s): variable or static TTF/OTF/WOFF/WOFF2")
     p.add_argument("--version", action="version", version=f"%(prog)s {package_version()}")
-    p.add_argument("--list-features", action="store_true",
+    p.add_argument("--info", action="store_true",
                    help="show the font's axes, named instances, features and languages, then exit")
     p.add_argument("--features", default="", metavar="TAGS",
                    help="features to make the default (freeze), e.g. ss02,zero; for a feature with several "
                         "alternates, add a number: cv47=2 picks the second")
     p.add_argument("--language", default="", metavar="TAG",
                    help="freeze the forms the font has for a language, e.g. --features locl --language ROM for "
-                        "Romanian ș ț with a comma below (--list-features shows the font's languages)")
+                        "Romanian ș ț with a comma below (--info shows the font's languages)")
     p.add_argument("--disable", default="", metavar="TAGS",
-                   help="features to turn off, e.g. calt,liga for no ligatures (--list-features shows which a font has)")
+                   help="features to turn off, e.g. calt,liga for no ligatures (--info shows which a font has)")
     p.add_argument("--name", default="", metavar="NAME",
                    help='new family name, e.g. "Inter Clear" (recommended, so your build doesn\'t clash with '
                         'the original)')
@@ -195,9 +195,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> None:
-    if args.list_features:
+    if args.info:
         for path in args.fonts:
-            list_features(path)
+            show_info(path)
         return
 
     options = core.Options(

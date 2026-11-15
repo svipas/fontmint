@@ -127,9 +127,9 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("disabled liga", err)
 
-    def test_list_features(self):
+    def test_info(self):
         code, out, _ = self.run_cli(self.tmp / "TestSans[wght,wdth].ttf", self.tmp / "TestSans-Regular.otf",
-                                    "--list-features")
+                                    "--info")
         self.assertEqual(code, 0)
         self.assertIn("instances: Regular, Bold, Condensed, Condensed Bold", out)
         self.assertIn("static font", out)
@@ -151,7 +151,7 @@ class CliTest(unittest.TestCase):
             (("--jobs", "0"), 2, "at least 1", "TestSans[wght,wdth].ttf"),
             (("--axis", "XXXX=1", "--axis", "XXXX=2"), 1, "axis 'XXXX' given twice\n", "TestSans[wght,wdth].ttf"),
             (("--width", "75", "--axis", "wdth=100"), 1, "use either --width or --axis wdth=", "TestSans[wght,wdth].ttf"),
-            (("--list-features",), 1, "No such file or directory", "missing.ttf"),
+            (("--info",), 1, "No such file or directory", "missing.ttf"),
             (("--name", "a/../../Esc"), 1, "--name may only use", "TestSans-Regular.otf"),
         ]
         for args, expected_code, message, font in cases:
