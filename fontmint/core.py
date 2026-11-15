@@ -3,8 +3,9 @@
 Nothing here touches the filesystem, parses arguments, prints or exits, so it can
 be used from the CLI, from other Python code, or in a browser (Pyodide).
 
-Static fonts (TTF, OTF, WOFF, WOFF2) pass through: features are frozen and the
-family renamed, nothing else changes - same format, hinting kept, no extra files.
+Static fonts (TTF, OTF, WOFF, WOFF2) pass through: features are frozen, the family
+renamed and line metrics adjusted as asked, nothing else changes - same format,
+hinting kept, no extra files.
 
 Variable fonts produce:
   - the variable font itself (features frozen, renamed, otherwise unchanged)
@@ -39,6 +40,7 @@ from .features import (
     parse_features,
     parse_tags,
 )
+from .metrics import LETTER_SPACING_RANGE, LINE_HEIGHT_RANGE, add_letter_spacing, line_height, set_line_height
 from .naming import (
     WINDOWS_FAMILY_LIMIT,
     apply_style_name,
@@ -71,6 +73,9 @@ class Options:
     language:    freeze the forms the font has for this language, an OpenType tag such
                  as "ROM" (Romanian ș ț with a comma below); used with features="locl".
     disable:     features to turn off, e.g. "liga,calt" (GSUB or GPOS).
+    line_height: line spacing as a multiple of the font size, like CSS, e.g. 1.4.
+    letter_spacing: extra space after each character as a fraction of the font size,
+                 like CSS letter-spacing in em, e.g. 0.05 (negative tightens).
     name:        new family name.
     axes:        axis tag → values, e.g. {"wght": "400,700", "wdth": [75, (75, 100)]}.
                  Values pin (static fonts), MIN:MAX ranges trim (variable fonts),
@@ -87,6 +92,8 @@ class Options:
     features: str | list[str] | dict[str, int] = ""
     language: str = ""
     disable: str | list[str] = ""
+    line_height: float | None = None
+    letter_spacing: float = 0
     name: str = ""
     axes: dict[str, object] = field(default_factory=dict)
     style_name: str = ""
@@ -109,6 +116,14 @@ class Options:
             self.formats = {f.strip() for f in self.formats.split(",") if f.strip()}
 
     def validate(self) -> None:
+        low, high = LINE_HEIGHT_RANGE
+        if self.line_height is not None and not low <= self.line_height <= high:
+            raise FontmintError(f"--line-height {self.line_height:g} is out of range; use a multiple of the font "
+                                f"size between {low:g} and {high:g}, e.g. 1.4")
+        low, high = LETTER_SPACING_RANGE
+        if not low <= self.letter_spacing <= high:
+            raise FontmintError(f"--letter-spacing {self.letter_spacing:g} is out of range; use a fraction of the "
+                                f"font size between {low:g} and {high:g}, e.g. 0.05")
         if self.language:
             if not 1 <= len(self.language) <= 4:
                 raise FontmintError(f"'{self.language}' isn't a language tag; tags have 1-4 letters, e.g. ROM, SRB")
@@ -136,6 +151,7 @@ class FontInfo:
     positioning: list[str] = field(default_factory=list)  # positioning (GPOS) feature tags, e.g. kern
     feature_names: dict[str, str] = field(default_factory=dict)  # e.g. {"ss02": "Disambiguation"}
     languages: list[str] = field(default_factory=list)  # languages with their own forms, e.g. ["ROM", "SRB"]
+    line_height: float = 0.0                               # line spacing as a multiple of the font size
 
 
 @dataclass
@@ -187,7 +203,8 @@ def inspect(font_bytes: bytes) -> FontInfo:
         for inst in font["fvar"].instances:
             instances.append((get_name(font, inst.subfamilyNameID) or "?", dict(inst.coordinates)))
     return FontInfo(family_name(font), variable, axes, instances, list_features(font), is_italic(font),
-                    list_features(font, "GPOS"), feature_names(font), language_tags(font))
+                    list_features(font, "GPOS"), feature_names(font), language_tags(font),
+                    line_height(font))
 
 
 
@@ -213,7 +230,7 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
             warnings.append("--name is the original family name; the build will clash with the original font")
         warnings += rename_family(font, old_family, options.name)
         check_ps_length(get_name(font, 6) or "")
-    elif variable or spec or disable:
+    elif variable or spec or disable or options.line_height is not None or options.letter_spacing:
         warnings.append("no --name given; the output keeps the original family name and will clash with the "
                         "original font (add --name to avoid this)")
 
@@ -222,6 +239,11 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
         result = freeze_features(font, spec, options.language)
         frozen = result.remapped
         warnings += _freeze_warnings(options.features, result)
+
+    if options.line_height is not None:
+        set_line_height(font, options.line_height)
+    if options.letter_spacing:
+        add_letter_spacing(font, options.letter_spacing)
 
     if variable:
         return _prepare_variable_input(font, options, old_family, frozen, warnings)

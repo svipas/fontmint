@@ -12,6 +12,7 @@ read every input   ──bytes──▶  prepare(font_bytes, Options) ─▶ Pre
                                  ├─ disable_features     (features.py)
                                  ├─ rename_family        (naming.py)
                                  ├─ freeze_features      (features.py)
+                                 ├─ line height, letter spacing (metrics.py)
                                  ├─ static input   → files = {path: same-format bytes}, jobs = []
                                  └─ variable input → files = variable output (default mode only)
                                                      jobs  = static + trimmed-variable Jobs
@@ -47,15 +48,16 @@ The CLI writes nothing until every input is prepared and every job has succeeded
 
 ## Module boundaries
 
-| Module        | Must not                                                    |
-| ------------- | ----------------------------------------------------------- |
-| `common.py`   | depend on other fontmint modules                            |
-| `features.py` | change outlines; it edits only `cmap` and GSUB/GPOS lookups |
-| `naming.py`   | touch name IDs 0, 7, 8–14                                   |
-| `axes.py`     | know about output formats                                   |
-| `convert.py`  | import native helpers at module level                       |
-| `core.py`     | print, exit, or use the filesystem                          |
-| `cli.py`      | contain font logic                                          |
+| Module        | Must not                                                     |
+| ------------- | ------------------------------------------------------------ |
+| `common.py`   | depend on other fontmint modules                             |
+| `features.py` | change outlines; it edits only `cmap` and GSUB/GPOS lookups  |
+| `naming.py`   | touch name IDs 0, 7, 8–14                                    |
+| `metrics.py`  | move outlines; it edits only line metrics and advance widths |
+| `axes.py`     | know about output formats                                    |
+| `convert.py`  | import native helpers at module level                        |
+| `core.py`     | print, exit, or use the filesystem                           |
+| `cli.py`      | contain font logic                                           |
 
 ## Native helpers
 
@@ -83,7 +85,8 @@ What each step does to the font, and which library does it:
 
    A frozen feature's lookups that the cmap can't hold (one-to-many, ligatures, context) are added to `calt`, or `liga` if a script has no `calt` (`FreezeResult.moved`). Both are on by default but usually off when an editor turns off ligatures. A lookup keeps its place in the lookup list, so it runs as in the original with the feature on; that holds only where engines apply all features in one pass, so this is limited to Latin, Greek and Cyrillic. Lookups that call an alternate lookup aren't moved for `cv47=2`, as apps would pick the first alternate. Features whose leftovers can't be moved are reported as partly frozen. Because the variable font itself is repaired, its static instances need no separate step.
 
-4. **Instance** - [fontTools](https://github.com/fonttools/fonttools)' `varLib.instancer` pins axes for static fonts or limits them for trimmed variable fonts. A range may exclude the axis default; fontTools then moves the default into the range. A hinted source's `cvar` is applied, so its hints stay correct for each instance.
-5. **Hint** - sources with their own hinting keep it for `*-hinted/` and are stripped for `*-unhinted/`; unhinted sources go through [ttfautohint](https://freetype.org/ttfautohint/) via `ttfautohint-py` (bundled library, no system install).
-6. **Convert to OTF** - the OTF starts from the unhinted TTF's compiled outlines, so both formats have the same rounded coordinates. Overlapping contours are merged with [skia-pathops](https://github.com/fonttools/skia-pathops), because CFF has no overlap flag. Runs of quadratic curves become cubic curves with `Qu2CuPen` (max error 1 font unit, fontTools' default: a tighter value gained nothing measurable, and a looser one caused visible area differences on hairline accents). Left side bearings are recomputed from the new outlines, and the `post` italic angle and underline values are copied into the CFF top dict. Finally, [cffsubr](https://github.com/adobe-type-tools/cffsubr) subroutinizes the CFF table, which roughly halves its size. No CFF hints are added.
-7. **WOFF2** - fontTools with Brotli; lossless.
+4. **Line height and letter spacing** (`metrics.py`) - both measured like CSS, in multiples of the font size. Line height splits the change equally above and below and writes it to `hhea` and the OS/2 typo values (with "use typo metrics" set, raising OS/2 version 2/3 to 4, which has the same fields) with no line gap; `usWin*` only grows, since Windows clips glyphs outside it. `MVAR` entries for those values are dropped. Letter spacing widens every glyph with a width and leaves zero-width ones (accents) alone; outlines don't move, so GPOS kerning and anchors stay correct (an accent's offset shrinks by exactly the amount its base widened). `hdmx` holds per-size widths and is dropped; CFF charstrings store each width again and are kept in sync.
+5. **Instance** - [fontTools](https://github.com/fonttools/fonttools)' `varLib.instancer` pins axes for static fonts or limits them for trimmed variable fonts. A range may exclude the axis default; fontTools then moves the default into the range. A hinted source's `cvar` is applied, so its hints stay correct for each instance.
+6. **Hint** - sources with their own hinting keep it for `*-hinted/` and are stripped for `*-unhinted/`; unhinted sources go through [ttfautohint](https://freetype.org/ttfautohint/) via `ttfautohint-py` (bundled library, no system install).
+7. **Convert to OTF** - the OTF starts from the unhinted TTF's compiled outlines, so both formats have the same rounded coordinates. Overlapping contours are merged with [skia-pathops](https://github.com/fonttools/skia-pathops), because CFF has no overlap flag. Runs of quadratic curves become cubic curves with `Qu2CuPen` (max error 1 font unit, fontTools' default: a tighter value gained nothing measurable, and a looser one caused visible area differences on hairline accents). Left side bearings are recomputed from the new outlines, and the `post` italic angle and underline values are copied into the CFF top dict. Finally, [cffsubr](https://github.com/adobe-type-tools/cffsubr) subroutinizes the CFF table, which roughly halves its size. No CFF hints are added.
+8. **WOFF2** - fontTools with Brotli; lossless.

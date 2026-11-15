@@ -134,6 +134,7 @@ class CliTest(unittest.TestCase):
         self.assertIn("instances: Regular, Bold, Condensed, Condensed Bold", out)
         self.assertIn("static font", out)
         self.assertIn("features:  liga ss01\n  named:     ss01  Slashed zero\n", out)
+        self.assertIn("line height: 1.00", out)
         self.assertNotIn("positioning:", out)  # the test fonts have no GPOS features
 
     def test_errors(self):

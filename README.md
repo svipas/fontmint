@@ -22,8 +22,9 @@ This command builds 94 files: the Inter font with its `ss02` set (slashed zero, 
 - **Freeze features** - make stylistic sets and character variants (`ss02`, `cv05`, `zero`, …) the default glyphs (letter shapes), so they appear in every app, even apps that can't turn on OpenType features. Ligatures and rules that depend on neighboring characters are updated to work with the frozen glyphs.
 - **Pick an alternate** - when a feature offers several alternative shapes for a character, choose which one becomes the default: `cv47=2` picks the second.
 - **Turn features off** - for example `--disable calt` for a coding font without ligatures.
+- **Line height and letter spacing** - `--line-height 1.5` and `--letter-spacing 0.02`, measured like in CSS, for apps that have no such settings.
 - **Rename the family** - your build installs next to the original without conflicts. Copyright, trademark and license notices are never changed. If the font's license reserves its name, choose a `--name` that doesn't contain it.
-- **Works on static fonts too** - a static (non-variable) TTF, OTF, WOFF or WOFF2 file keeps everything except the features you freeze or turn off and the name: same format, original hinting kept.
+- **Works on static fonts too** - a static (non-variable) TTF, OTF, WOFF or WOFF2 file keeps everything except what you change (features, name, line height, letter spacing): same format, original hinting kept.
 - **Variable fonts** - keep every axis (weight, width, …) in one file (TTF + WOFF2), or trim an axis: `--weight 300:700` makes a smaller variable font with only those weights.
 - **Static fonts at any axis value** - `--weight 375`, `--width 75`, `--slant -10`, `--optical-size 32`, or any other axis with `--axis`. With several axes, you get every combination.
 - **Custom style names** - name a weight-375 build `Regular`, so apps treat it as the normal regular weight.
@@ -78,7 +79,7 @@ If the font names its features, the names are listed under them, so you can see 
 
 ### Static fonts: freeze and rename only
 
-A static font (TTF, OTF, WOFF or WOFF2) comes back in **the same format** - only the features you freeze or turn off and the new name change. Glyph shapes, hinting and all other font data stay as they were, and no other formats are created.
+A static font (TTF, OTF, WOFF or WOFF2) comes back in **the same format** - only what you ask for changes: features, the name, line height and letter spacing. Glyph shapes, hinting and all other font data stay as they were, and no other formats are created.
 
 ```bash
 fontmint FooFont-Regular.otf --features ss01 --name "Foo New"
@@ -110,6 +111,16 @@ fontmint 'OpenSans[wdth,wght].ttf' --features locl --language ROM --name "Open S
 ```
 
 `--info` shows which languages a font has forms for. The tags are OpenType language tags, such as `ROM` for Romanian or `SRB` for Serbian.
+
+### Line height and letter spacing
+
+Some apps have no setting for the space between lines or letters. Build it into the font instead. Both values work like in CSS: `--line-height` is a multiple of the font size, and `--letter-spacing` is a fraction of it added after each character (negative values tighten):
+
+```bash
+fontmint JetBrainsMono*.ttf --name "JetBrains Mono Airy" --line-height 1.5 --letter-spacing 0.02
+```
+
+`--info` shows a font's current line height (JetBrains Mono: 1.32). The extra line space is split equally above and below the text, and accents and kerning stay where they belong.
 
 ### Variable fonts: build everything
 
@@ -194,6 +205,8 @@ Fonts without Latin letters, such as icon fonts, can't be hinted automatically; 
 | `--features ss02,zero`    | Features to freeze; `cv47=2` picks a feature's second alternate.             |
 | `--language ROM`          | Freeze the forms the font has for this language (with `--features locl`).    |
 | `--disable calt,liga`     | Features to turn off.                                                        |
+| `--line-height 1.5`       | Line spacing as a multiple of the font size, like CSS.                       |
+| `--letter-spacing 0.02`   | Extra space after each character, as a fraction of the font size.            |
 | `--name "Inter Clear"`    | New family name. Recommended, so your build doesn't clash with the original. |
 | `--weight 400,700`        | Weight axis (`wght`).                                                        |
 | `--width 75,100`          | Width axis (`wdth`), in % - 75 = Condensed, 125 = Expanded.                  |

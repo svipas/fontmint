@@ -27,6 +27,9 @@ Examples:
     # a coding font without ligatures (JetBrains Mono keeps them in calt)
     fontmint JetBrainsMono*.ttf --disable calt --name "JetBrains Mono Flat"
 
+    # more space between lines and letters
+    fontmint JetBrainsMono*.ttf --name "JetBrains Mono Airy" --line-height 1.5 --letter-spacing 0.02
+
     # Romanian forms (ș ț with a comma below) as the default
     fontmint 'OpenSans[wdth,wght].ttf' --features locl --language ROM --name "Open Sans RO"
 """
@@ -131,6 +134,7 @@ def show_info(path: Path) -> None:
         print(f"  positioning: {' '.join(info.positioning)}")
     if info.languages:
         print(f"  languages: {' '.join(info.languages)}")
+    print(f"  line height: {info.line_height:.2f}")
 
 
 def package_version() -> str:
@@ -164,6 +168,12 @@ def build_parser() -> argparse.ArgumentParser:
                         "Romanian ș ț with a comma below (--info shows the font's languages)")
     p.add_argument("--disable", default="", metavar="TAGS",
                    help="features to turn off, e.g. calt,liga for no ligatures (--info shows which a font has)")
+    p.add_argument("--line-height", type=float, default=None, metavar="N",
+                   help="line spacing as a multiple of the font size, like CSS line-height, e.g. 1.4 "
+                        "(--info shows the current value)")
+    p.add_argument("--letter-spacing", type=float, default=0, metavar="EM",
+                   help="extra space after each character as a fraction of the font size, like CSS "
+                        "letter-spacing in em, e.g. 0.05 (negative values tighten)")
     p.add_argument("--name", default="", metavar="NAME",
                    help='new family name, e.g. "Inter Clear" (recommended, so your build doesn\'t clash with '
                         'the original)')
@@ -204,6 +214,8 @@ def run(args: argparse.Namespace) -> None:
         features=args.features,
         language=args.language,
         disable=args.disable,
+        line_height=args.line_height,
+        letter_spacing=args.letter_spacing,
         name=args.name,
         axes=collect_axes(args),
         style_name=args.style_name,
@@ -239,6 +251,10 @@ def run(args: argparse.Namespace) -> None:
             log(f"  froze {options.features}{language}: {prepared.frozen} characters remapped")
         if options.disable:
             log(f"  disabled {options.disable}")
+        if options.line_height is not None:
+            log(f"  line height {options.line_height:g}")
+        if options.letter_spacing:
+            log(f"  letter spacing {options.letter_spacing:+g} em")
         for w in prepared.warnings:
             log(f"  warning: {w}")
 
