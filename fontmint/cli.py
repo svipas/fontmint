@@ -30,6 +30,9 @@ Examples:
     # more space between lines and letters
     fontmint JetBrainsMono*.ttf --name "JetBrains Mono Airy" --line-height 1.5 --letter-spacing 0.02
 
+    # smaller web fonts with only Latin characters
+    fontmint InterVariable.ttf --name "Inter Web" --subset latin,latin-ext --formats woff2
+
     # Romanian forms (ș ț with a comma below) as the default
     fontmint 'OpenSans[wdth,wght].ttf' --features locl --language ROM --name "Open Sans RO"
 """
@@ -174,6 +177,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--letter-spacing", type=float, default=0, metavar="EM",
                    help="extra space after each character as a fraction of the font size, like CSS "
                         "letter-spacing in em, e.g. 0.05 (negative values tighten)")
+    p.add_argument("--subset", default="", metavar="LIST",
+                   help="keep only these characters, for smaller web fonts: latin, latin-ext, cyrillic, "
+                        "cyrillic-ext, greek, vietnamese, or ranges like U+2190-21FF (comma-separated)")
     p.add_argument("--name", default="", metavar="NAME",
                    help='new family name, e.g. "Inter Clear" (recommended, so your build doesn\'t clash with '
                         'the original)')
@@ -216,6 +222,7 @@ def run(args: argparse.Namespace) -> None:
         disable=args.disable,
         line_height=args.line_height,
         letter_spacing=args.letter_spacing,
+        subset=args.subset,
         name=args.name,
         axes=collect_axes(args),
         style_name=args.style_name,
@@ -255,6 +262,8 @@ def run(args: argparse.Namespace) -> None:
             log(f"  line height {options.line_height:g}")
         if options.letter_spacing:
             log(f"  letter spacing {options.letter_spacing:+g} em")
+        if prepared.subset:
+            log(f"  subset {options.subset}: kept {prepared.subset[0]} of {prepared.subset[1]} characters")
         for w in prepared.warnings:
             log(f"  warning: {w}")
 

@@ -10,7 +10,7 @@ People use fontmint on fonts they rely on every day, for their editor, their ter
 
 ### 1. We don't break fonts
 
-Whatever fontmint writes must install and render correctly. Static input passes through untouched apart from what you ask for (frozen or disabled features, the new name, line height and letter spacing): same format, original hinting kept, no extra files. Variable output only gets the same edits - never hinted, never outline-converted. When in doubt, change less.
+Whatever fontmint writes must install and render correctly. Static input passes through untouched apart from what you ask for (frozen or disabled features, the new name, line height, letter spacing and a subset): same format, original hinting kept, no extra files. Variable output only gets the same edits - never hinted, never outline-converted. When in doubt, change less.
 
 ### 2. We respect licenses
 
@@ -57,6 +57,7 @@ The rest of this document helps you navigate the codebase and make changes effec
 - `fontmint/axes.py` - axis values (`400,700`, `300:700`, `all`) and their combinations.
 - `fontmint/features.py` - listing, freezing and disabling features.
 - `fontmint/metrics.py` - line height and letter spacing.
+- `fontmint/subset.py` - keeping only some characters (`--subset`).
 - `fontmint/naming.py` - family renaming, style names, name records, weight/width classes.
 - `fontmint/convert.py` - TrueType → OTF and autohinting. The only module that uses native helpers.
 - `fontmint/common.py` - `FontmintError`, `FORMATS`, loading/saving fonts.
@@ -64,7 +65,7 @@ The rest of this document helps you navigate the codebase and make changes effec
 - `tests/` - `unittest` suite; `tests/fixtures.py` builds tiny fonts in code.
 - `assets/` - the logo.
 
-Dependency direction: `common` ← `features` / `naming` / `axes` / `metrics` / `convert` ← `core` ← `cli`. Nothing imports `cli`.
+Dependency direction: `common` ← `features` / `naming` / `axes` / `metrics` / `subset` / `convert` ← `core` ← `cli`. Nothing imports `cli`.
 
 How a font flows through these modules: [docs/architecture.md](docs/architecture.md). Exactly what gets built, and how files and styles are named: [docs/output-rules.md](docs/output-rules.md).
 

@@ -58,6 +58,7 @@ from .naming import (
     width_class,
     width_name,
 )
+from .subset import parse_subset, subset_font
 
 
 # Features many scripts need to show text correctly; turning them off gets a warning.
@@ -76,6 +77,8 @@ class Options:
     line_height: line spacing as a multiple of the font size, like CSS, e.g. 1.4.
     letter_spacing: extra space after each character as a fraction of the font size,
                  like CSS letter-spacing in em, e.g. 0.05 (negative tightens).
+    subset:      characters to keep, e.g. "latin,latin-ext" or "U+0000-00FF,U+20AC";
+                 empty keeps all.
     name:        new family name.
     axes:        axis tag → values, e.g. {"wght": "400,700", "wdth": [75, (75, 100)]}.
                  Values pin (static fonts), MIN:MAX ranges trim (variable fonts),
@@ -94,6 +97,7 @@ class Options:
     disable: str | list[str] = ""
     line_height: float | None = None
     letter_spacing: float = 0
+    subset: str = ""
     name: str = ""
     axes: dict[str, object] = field(default_factory=dict)
     style_name: str = ""
@@ -116,6 +120,8 @@ class Options:
             self.formats = {f.strip() for f in self.formats.split(",") if f.strip()}
 
     def validate(self) -> None:
+        if self.subset:
+            parse_subset(self.subset)
         low, high = LINE_HEIGHT_RANGE
         if self.line_height is not None and not low <= self.line_height <= high:
             raise FontmintError(f"--line-height {self.line_height:g} is out of range; use a multiple of the font "
@@ -186,6 +192,7 @@ class Prepared:
     warnings: list[str]
     files: dict[str, bytes]
     jobs: list[Job]
+    subset: tuple[int, int] | None = None  # (characters kept, characters before) with Options.subset
 
     @property
     def folder(self) -> str:
@@ -230,7 +237,7 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
             warnings.append("--name is the original family name; the build will clash with the original font")
         warnings += rename_family(font, old_family, options.name)
         check_ps_length(get_name(font, 6) or "")
-    elif variable or spec or disable or options.line_height is not None or options.letter_spacing:
+    elif variable or spec or disable or options.line_height is not None or options.letter_spacing or options.subset:
         warnings.append("no --name given; the output keeps the original family name and will clash with the "
                         "original font (add --name to avoid this)")
 
@@ -245,9 +252,14 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
     if options.letter_spacing:
         add_letter_spacing(font, options.letter_spacing)
 
+    subset = subset_font(font, parse_subset(options.subset)) if options.subset else None
+
     if variable:
-        return _prepare_variable_input(font, options, old_family, frozen, warnings)
-    return _prepare_static_input(font, options, old_family, frozen, warnings)
+        prepared = _prepare_variable_input(font, options, old_family, frozen, warnings)
+    else:
+        prepared = _prepare_static_input(font, options, old_family, frozen, warnings)
+    prepared.subset = subset
+    return prepared
 
 
 def _freeze_warnings(features: str, result: FreezeResult) -> list[str]:

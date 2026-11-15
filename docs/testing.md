@@ -19,6 +19,7 @@ Only the standard library's `unittest` is used - don't add pytest or other test 
 | `tests/test_naming.py`   | style composition, renaming (notices, one-word families, CFF), name records    |
 | `tests/test_features.py` | freezing in TTF / OTF / variable fonts                                         |
 | `tests/test_metrics.py`  | line height and letter spacing                                                 |
+| `tests/test_subset.py`   | subset presets, ranges, what's kept                                            |
 | `tests/test_core.py`     | end-to-end outputs for every mode, option errors, native helpers stay unloaded |
 | `tests/test_cli.py`      | the real command in a temp dir, `--info`, error messages + exit codes          |
 

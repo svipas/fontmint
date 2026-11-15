@@ -23,8 +23,9 @@ This command builds 94 files: the Inter font with its `ss02` set (slashed zero, 
 - **Pick an alternate** - when a feature offers several alternative shapes for a character, choose which one becomes the default: `cv47=2` picks the second.
 - **Turn features off** - for example `--disable calt` for a coding font without ligatures.
 - **Line height and letter spacing** - `--line-height 1.5` and `--letter-spacing 0.02`, measured like in CSS, for apps that have no such settings.
+- **Smaller web fonts** - `--subset latin` keeps only the characters you need; all features, names and hinting stay.
 - **Rename the family** - your build installs next to the original without conflicts. Copyright, trademark and license notices are never changed. If the font's license reserves its name, choose a `--name` that doesn't contain it.
-- **Works on static fonts too** - a static (non-variable) TTF, OTF, WOFF or WOFF2 file keeps everything except what you change (features, name, line height, letter spacing): same format, original hinting kept.
+- **Works on static fonts too** - a static (non-variable) TTF, OTF, WOFF or WOFF2 file keeps everything except what you change (features, name, line height, letter spacing, subset): same format, original hinting kept.
 - **Variable fonts** - keep every axis (weight, width, …) in one file (TTF + WOFF2), or trim an axis: `--weight 300:700` makes a smaller variable font with only those weights.
 - **Static fonts at any axis value** - `--weight 375`, `--width 75`, `--slant -10`, `--optical-size 32`, or any other axis with `--axis`. With several axes, you get every combination.
 - **Custom style names** - name a weight-375 build `Regular`, so apps treat it as the normal regular weight.
@@ -79,7 +80,7 @@ If the font names its features, the names are listed under them, so you can see 
 
 ### Static fonts: freeze and rename only
 
-A static font (TTF, OTF, WOFF or WOFF2) comes back in **the same format** - only what you ask for changes: features, the name, line height and letter spacing. Glyph shapes, hinting and all other font data stay as they were, and no other formats are created.
+A static font (TTF, OTF, WOFF or WOFF2) comes back in **the same format** - only what you ask for changes: features, the name, line height, letter spacing and subset. Glyph shapes, hinting and all other font data stay as they were, and no other formats are created.
 
 ```bash
 fontmint FooFont-Regular.otf --features ss01 --name "Foo New"
@@ -121,6 +122,24 @@ fontmint JetBrainsMono*.ttf --name "JetBrains Mono Airy" --line-height 1.5 --let
 ```
 
 `--info` shows a font's current line height (JetBrains Mono: 1.32). The extra line space is split equally above and below the text, and accents and kerning stay where they belong.
+
+### Smaller web fonts
+
+A font for a website usually needs far fewer characters than the full font has. `--subset` keeps only the ones you list and removes everything else, which often makes the files several times smaller:
+
+```bash
+fontmint InterVariable.ttf --name "Inter Web" --subset latin,latin-ext --formats woff2
+```
+
+The presets are `latin`, `latin-ext`, `cyrillic`, `cyrillic-ext`, `greek` and `vietnamese` (the character sets Google Fonts uses), and you can add ranges like `U+2190-21FF`. Glyphs the remaining characters need stay too, such as their alternates and ligatures, and so do all features, names and hinting. For the Inter variable font:
+
+| Subset            | Characters | WOFF2  | TTF    |
+| ----------------- | ---------- | ------ | ------ |
+| none              | 2,852      | 352 KB | 880 KB |
+| `latin`           | 284        | 108 KB | 269 KB |
+| `latin,latin-ext` | 1,004      | 214 KB | 532 KB |
+
+Subsetting works for every format, so a smaller desktop font is possible too, as long as it has every character you type.
 
 ### Variable fonts: build everything
 
@@ -207,6 +226,7 @@ Fonts without Latin letters, such as icon fonts, can't be hinted automatically; 
 | `--disable calt,liga`     | Features to turn off.                                                        |
 | `--line-height 1.5`       | Line spacing as a multiple of the font size, like CSS.                       |
 | `--letter-spacing 0.02`   | Extra space after each character, as a fraction of the font size.            |
+| `--subset latin`          | Keep only these characters: a preset or ranges like `U+2190-21FF`.           |
 | `--name "Inter Clear"`    | New family name. Recommended, so your build doesn't clash with the original. |
 | `--weight 400,700`        | Weight axis (`wght`).                                                        |
 | `--width 75,100`          | Width axis (`wdth`), in % - 75 = Condensed, 125 = Expanded.                  |
