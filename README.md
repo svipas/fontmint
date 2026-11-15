@@ -19,9 +19,11 @@ This command builds 94 files: the Inter font with its `ss02` set (slashed zero, 
 
 ## Features
 
-- **Freeze features** - make stylistic sets and character variants (`ss02`, `cv05`, `zero`, …) the default glyphs (letter shapes), so they appear in every app, even apps that can't turn on OpenType features.
+- **Freeze features** - make stylistic sets and character variants (`ss02`, `cv05`, `zero`, …) the default glyphs (letter shapes), so they appear in every app, even apps that can't turn on OpenType features. Ligatures and rules that depend on neighboring characters are updated to work with the frozen glyphs.
+- **Pick an alternate** - when a feature offers several alternative shapes for a character, choose which one becomes the default: `cv47=2` picks the second.
+- **Turn features off** - for example `--disable calt` for a coding font without ligatures.
 - **Rename the family** - your build installs next to the original without conflicts. Copyright, trademark and license notices are never changed. If the font's license reserves its name, choose a `--name` that doesn't contain it.
-- **Works on static fonts too** - a static (non-variable) TTF, OTF, WOFF or WOFF2 file keeps everything except the frozen features and the name: same format, original hinting kept.
+- **Works on static fonts too** - a static (non-variable) TTF, OTF, WOFF or WOFF2 file keeps everything except the features you freeze or turn off and the name: same format, original hinting kept.
 - **Variable fonts** - keep every axis (weight, width, …) in one file (TTF + WOFF2), or trim an axis: `--weight 300:700` makes a smaller variable font with only those weights.
 - **Static fonts at any axis value** - `--weight 375`, `--width 75`, `--slant -10`, `--optical-size 32`, or any other axis with `--axis`. With several axes, you get every combination.
 - **Custom style names** - name a weight-375 build `Regular`, so apps treat it as the normal regular weight.
@@ -62,15 +64,30 @@ OpenSans[wdth,wght].ttf
   axes:      wght 300–800 (default 400), wdth 75–100 (default 100)
   instances: Light, Regular, SemiBold, Bold, ExtraBold, Condensed Light, Condensed Regular, …
   features:  aalt ccmp dnom frac liga … ss01 ss02 ss03 ss04 subs sups tnum zero
+  spacing:   mark mkmk (can only be disabled)
 ```
 
 ### Static fonts: freeze and rename only
 
-A static font (TTF, OTF, WOFF or WOFF2) comes back in **the same format** - only the frozen features and the new name change. Glyph shapes, hinting and all other font data stay as they were, and no other formats are created.
+A static font (TTF, OTF, WOFF or WOFF2) comes back in **the same format** - only the features you freeze or turn off and the new name change. Glyph shapes, hinting and all other font data stay as they were, and no other formats are created.
 
 ```bash
 fontmint FooFont-Regular.otf --features ss01 --name "Foo New"
 # → dist/FooNew/FooNew-Regular.otf
+```
+
+### Pick alternates and turn features off
+
+Some features offer several alternative shapes for the same character (fonts like Iosevka have many). Add a number to choose one; without a number you get the first:
+
+```bash
+fontmint Iosevka-Regular.ttf --features cv47=2 --name "Iosevka Mine"
+```
+
+`--disable` turns features off completely, for example the ligatures in a coding font (JetBrains Mono keeps them in `calt`):
+
+```bash
+fontmint JetBrainsMono*.ttf --disable calt --name "JetBrains Mono Flat"
 ```
 
 ### Variable fonts: build everything
@@ -153,7 +170,8 @@ Fonts without Latin letters, such as icon fonts, can't be hinted automatically; 
 | Option                    | Description                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------- |
 | `--list-features`         | Show the font's axes, named instances and features, then exit.               |
-| `--features ss02,zero`    | Features to freeze.                                                          |
+| `--features ss02,zero`    | Features to freeze; `cv47=2` picks a feature's second alternate.             |
+| `--disable calt,liga`     | Features to turn off.                                                        |
 | `--name "Inter Clear"`    | New family name. Recommended, so your build doesn't clash with the original. |
 | `--weight 400,700`        | Weight axis (`wght`).                                                        |
 | `--width 75,100`          | Width axis (`wdth`), in % - 75 = Condensed, 125 = Expanded.                  |
@@ -192,6 +210,8 @@ dist/InterClear/
 
 Static input is written straight into `dist/<FamilyName>/`, in its own format.
 
+Static fonts where every character has the same width are marked as monospaced, so apps that list only monospaced fonts show them.
+
 Static fonts built with axis options are named after their axis values: `Condensed Bold Italic`, `W375` for non-standard weights, `Wdth80` for non-standard widths, `Oblique` for slanted fonts, and labels like `Opsz32` or `MONO1` for other axes that get several values in one run.
 
 Nothing is written until every font has been built and every destination has been checked, so a failed run doesn't leave half a build behind. If you run fontmint again with the same output folder, files with the same name are overwritten and other files are kept; fontmint warns you when this happens.
@@ -227,12 +247,28 @@ for rel, content in files.items():  # {"InterClear/otf/InterClear-Bold.otf": b"�
     Path("dist", rel).write_bytes(content)
 ```
 
-Options also take lists and sets: `features=["ss02", "zero"]`, `formats={"ttf", "woff2"}`, `axes={"wght": [400, 700]}`. A tuple is a range: `axes={"wght": (300, 700)}` is the same as `"300:700"`. Errors raise `fontmint.FontmintError`.
+Options also accept Python values instead of strings:
+
+```python
+from fontmint import FontmintError, Options, mint
+
+options = Options(
+    features={"ss02": 1, "cv05": 1},  # the number picks an alternate; 1 is the first
+    disable=["calt"],
+    name="Inter Clear",
+    axes={"wght": [400, 700]},  # a tuple, (300, 700), is a range
+    formats={"ttf", "woff2"},
+)
+try:
+    files = mint(data, options)
+except FontmintError as e:
+    print(f"fontmint: {e}")
+```
 
 ## Limitations
 
-- Only features that replace one glyph with another can be frozen (`ssXX`, `cvXX`, `zero`, …). Ligatures (several characters joined into one glyph) and contextual features (which depend on the neighboring characters) can't. fontmint warns when a feature changes nothing.
-- Freezing changes only the default glyph of each character. Glyphs that other features switch to stay the same - e.g. tabular figures (`tnum`) still use the original zero.
+- Only features that replace one glyph with another can be frozen (`ssXX`, `cvXX`, `zero`, `tnum`, …). Ligatures (several characters joined into one glyph) and contextual features (which depend on the neighboring characters) can't be frozen, but they can be turned off with `--disable`. fontmint warns when a feature is only partly frozen or changes nothing.
+- Freezing also updates ligatures and other rules that use the frozen characters. In rare cases a rule can't be updated; fontmint warns when that happens.
 - Font collections (`.ttc`) aren't supported; extract the fonts from them first.
 
 ## Development
@@ -245,7 +281,7 @@ Tests build tiny fonts in code, so the repo contains no binary fixtures. For the
 
 ## Credits
 
-fontmint is built on [fontTools](https://github.com/fonttools/fonttools), [opentype-feature-freezer](https://github.com/twardoch/fonttools-opentype-feature-freezer), [ttfautohint](https://freetype.org/ttfautohint/), [skia-pathops](https://github.com/fonttools/skia-pathops) and [cffsubr](https://github.com/adobe-type-tools/cffsubr).
+fontmint is built on [fontTools](https://github.com/fonttools/fonttools), [ttfautohint](https://freetype.org/ttfautohint/), [skia-pathops](https://github.com/fonttools/skia-pathops) and [cffsubr](https://github.com/adobe-type-tools/cffsubr).
 
 ## License
 

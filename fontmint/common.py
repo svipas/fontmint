@@ -62,6 +62,11 @@ def get_name(font: TTFont, name_id: int) -> str | None:
 
 
 def family_name(font: TTFont) -> str:
+    """The family name, preferring English records over localized ones."""
+    for name_id in (16, 1):
+        rec = font["name"].getName(name_id, 3, 1, 0x409) or font["name"].getName(name_id, 1, 0, 0)
+        if rec:
+            return rec.toUnicode()
     return get_name(font, 16) or get_name(font, 1) or "Font"
 
 

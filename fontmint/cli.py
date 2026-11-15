@@ -23,6 +23,9 @@ Examples:
 
     # a static font: freeze + rename only, same format, hinting kept
     fontmint FooFont-Regular.otf --features ss01 --name "Foo New"
+
+    # a coding font without ligatures (JetBrains Mono keeps them in calt)
+    fontmint JetBrainsMono*.ttf --disable calt --name "JetBrains Mono Flat"
 """
 
 from __future__ import annotations
@@ -119,6 +122,8 @@ def list_features(path: Path) -> None:
         print(f"  axes:      {axes}")
         print(f"  instances: {', '.join(name for name, _ in info.instances) or '-'}")
     print(f"  features:  {' '.join(info.features) or '-'}")
+    if info.positioning:
+        print(f"  spacing:   {' '.join(info.positioning)} (can only be disabled)")
 
 
 def package_version() -> str:
@@ -145,7 +150,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--list-features", action="store_true",
                    help="show the font's axes, named instances and features, then exit")
     p.add_argument("--features", default="", metavar="TAGS",
-                   help="features to make the default (freeze), e.g. ss02,zero")
+                   help="features to make the default (freeze), e.g. ss02,zero; for a feature with several "
+                        "alternates, add a number: cv47=2 picks the second")
+    p.add_argument("--disable", default="", metavar="TAGS",
+                   help="features to turn off, e.g. calt,liga for no ligatures (--list-features shows which a font has)")
     p.add_argument("--name", default="", metavar="NAME",
                    help='new family name, e.g. "Inter Clear" (recommended, so your build doesn\'t clash with '
                         'the original)')
@@ -184,6 +192,7 @@ def run(args: argparse.Namespace) -> None:
 
     options = core.Options(
         features=args.features,
+        disable=args.disable,
         name=args.name,
         axes=collect_axes(args),
         style_name=args.style_name,

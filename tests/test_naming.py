@@ -1,6 +1,6 @@
 import unittest
 
-from fontmint.common import FontmintError
+from fontmint.common import FontmintError, family_name
 from fontmint.naming import (
     apply_style_name,
     check_name,
@@ -111,6 +111,33 @@ class RenameFamilyTest(unittest.TestCase):
         self.assertEqual(name.getDebugName(16), "Foo New")
         self.assertEqual(name.getDebugName(6), "FooNew-Medium")
         self.assertEqual(name.getDebugName(3), "1.000;TEST;FooNew-Medium")
+
+    def test_postscript_name_without_the_family(self):
+        font = fx.open_font(fx.static_ttf())
+        font["name"].setName("TestSANS-Regular", 6, 3, 1, 0x409)
+        font["name"].setName("1.000;TEST;TestSANS-Regular", 3, 3, 1, 0x409)
+        warnings = rename_family(font, "Test Sans", "Mint Sans")
+        self.assertEqual(font["name"].getDebugName(6), "MintSans-Regular")
+        self.assertEqual(font["name"].getDebugName(3), "1.000;TEST;MintSans-Regular")
+        self.assertEqual(warnings, [])
+
+    def test_localized_family_names_are_dropped(self):
+        font = fx.open_font(fx.static_ttf())
+        font["name"].setName("テスト サンズ", 1, 3, 1, 0x411)
+        font["name"].setName("テスト サンズ", 16, 3, 1, 0x411)
+        rename_family(font, "Test Sans", "Mint Sans")
+        self.assertFalse([r for r in font["name"].names if r.langID == 0x411 and r.nameID in (1, 16)])
+
+    def test_english_family_wins(self):
+        font = fx.open_font(fx.static_ttf())
+        font["name"].setName("テスト サンズ", 16, 3, 1, 0x411)  # only a Japanese typographic family
+        self.assertEqual(family_name(font), "Test Sans")
+
+    def test_leftover_names_warn(self):
+        font = fx.open_font(fx.static_ttf())
+        font["name"].setName("TestSans Regular", 4, 3, 1, 0x409)  # PostScript-style family inside a display name
+        warnings = rename_family(font, "Test Sans", "Mint")
+        self.assertTrue(warnings and "still mention" in warnings[0])
 
     def test_cff_names_follow(self):
         font = fx.open_font(fx.static_otf())

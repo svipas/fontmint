@@ -21,7 +21,9 @@ from fontTools.pens.t2CharStringPen import T2CharStringPen
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont, newTable
 from fontTools.ttLib.tables import ttProgram
+from fontTools.ttLib.tables import _c_m_a_p
 from fontTools.ttLib.tables.TupleVariation import TupleVariation
+from fontTools.varLib.featureVars import addFeatureVariations
 
 FAMILY = "Test Sans"
 COPYRIGHT = "Copyright 2026 The Test Sans Project Authors"
@@ -193,6 +195,30 @@ def symbol_variable_ttf() -> bytes:
     fb = _builder(True, SYMBOLS, SYMBOLS_CMAP, "", italic=False, hinted=False)
     _add_variations(fb, SYMBOLS, italic=False)
     return _save(fb.font)
+
+
+@cache
+def mac_cmap_ttf() -> bytes:
+    """Static font with 300 extra glyphs before zero.ss01 (so its glyph ID is > 255)
+    and an old Mac cmap subtable (format 0), which can only hold IDs up to 255."""
+    boxes = {name: box for name, box in LATIN.items() if name != "zero.ss01"}
+    boxes |= {f"filler{i}": None for i in range(300)}
+    boxes["zero.ss01"] = LATIN["zero.ss01"]
+    font = _builder(True, boxes, LATIN_CMAP, LATIN_FEATURES, italic=False, hinted=False).font
+    mac = _c_m_a_p.CmapSubtable.newSubtable(0)
+    mac.platformID, mac.platEncID, mac.language = 1, 0, 0
+    mac.cmap = dict(LATIN_CMAP)
+    font["cmap"].tables.append(mac)
+    return _save(font)
+
+
+@cache
+def axis_swap_variable_ttf() -> bytes:
+    """Variable font whose '0' turns into the O glyph at heavy weights (rvrn feature
+    variation, like Recursive's italic letters); ss01 also changes '0'."""
+    font = open_font(variable_ttf())
+    addFeatureVariations(font, [([{"wght": (0.5, 1.0)}], {"zero": "O"})], featureTag="rvrn")
+    return _save(font)
 
 
 def open_font(data: bytes) -> TTFont:

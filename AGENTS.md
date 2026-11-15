@@ -10,7 +10,7 @@ People use fontmint on fonts they rely on every day, for their editor, their ter
 
 ### 1. We don't break fonts
 
-Whatever fontmint writes must install and render correctly. Static input passes through untouched apart from the frozen features and the new name: same format, original hinting kept, no extra files. Variable output is only frozen and renamed - never hinted, never outline-converted. When in doubt, change less.
+Whatever fontmint writes must install and render correctly. Static input passes through untouched apart from the features you freeze or turn off and the new name: same format, original hinting kept, no extra files. Variable output only gets the same edits - never hinted, never outline-converted. When in doubt, change less.
 
 ### 2. We respect licenses
 
@@ -40,7 +40,7 @@ The rest of this document helps you navigate the codebase and make changes effec
 - **static input** means a non-variable TTF, OTF, WOFF or WOFF2 file. It passes through.
 - **variable input** means a font with an `fvar` table. It is the only input that produces static fonts, trimmed fonts and extra formats.
 - **named instance** means a style the font's designer defined in `fvar` (e.g. "Condensed Bold"). Without axis options, fontmint builds one static font per named instance.
-- **freeze** means remapping the character map so a GSUB substitution becomes the default glyph.
+- **freeze** means remapping the character map so a GSUB substitution becomes the default glyph, then updating ligatures and context rules so they still work with the frozen glyphs.
 - **trimmed variable font** means a variable font whose axes were limited by a range (`--weight 300:700`).
 - **job** means one output built from a variable font, run in a worker process.
 
@@ -55,7 +55,7 @@ The rest of this document helps you navigate the codebase and make changes effec
 
 - `fontmint/core.py` - the pipeline: `Options` → `prepare()` → `Prepared` (files + jobs) → `build_job()`. Also `mint()` and `inspect()`.
 - `fontmint/axes.py` - axis values (`400,700`, `300:700`, `all`) and their combinations.
-- `fontmint/features.py` - listing and freezing GSUB features.
+- `fontmint/features.py` - listing, freezing and disabling features.
 - `fontmint/naming.py` - family renaming, style names, name records, weight/width classes.
 - `fontmint/convert.py` - TrueType → OTF and autohinting. The only module that uses native helpers.
 - `fontmint/common.py` - `FontmintError`, `FORMATS`, loading/saving fonts.
@@ -114,7 +114,8 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 - In argparse help strings, a literal `%` must be written `%%`, or `--help` crashes.
 - fontTools re-serializes tables it loaded: `GSUB` bytes change after freezing although its content is identical. Compare tables with `toXML` when bytes differ.
 - `Qu2CuPen(all_cubic=True)` raises `NotImplementedError` on contours without on-curve points (common after overlap removal). `ttf_to_otf` falls back to exact conversion for that glyph.
-- opentype-feature-freezer logs a warning for every alternate without a character. `features.py` silences its logger while freezing.
+- Freezing only changes `cmap`, so other GSUB rules still expect the original glyphs. `features.py` repairs what it safely can: ligatures (adds the same ligature for the frozen glyphs), and context rules in formats 2/3 that ran before the frozen feature (adds the frozen glyph next to the original, and teaches their nested single substitutions the frozen glyph). Whatever it can't repair is counted in `FreezeResult.stale_rules` and becomes a warning. Verify freezing changes against HarfBuzz: the frozen font with default settings must shape like the original with the feature on.
+- Text engines run each lookup once, in lookup-list order, and `rvrn` before everything else. The freezer follows the same order; for fonts with feature variations, static fonts are frozen after instancing with `rvrn` first.
 - One-word families ("Inter") make display and PostScript names look identical. Renaming decides by name ID, not by spaces alone.
 - Quote file names with brackets (`'OpenSans[wdth,wght].ttf'`) in examples - zsh treats brackets as patterns. Don't quote real globs (`InterVariable*.ttf`), or the shell won't expand them.
 - ttfautohint fails on fonts without Latin reference glyphs (icon fonts). `convert.autohint` turns that into a `FontmintError` pointing at `--no-hint`.

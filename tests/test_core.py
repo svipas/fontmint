@@ -40,7 +40,13 @@ class StaticInputTest(unittest.TestCase):
             self.assertEqual(src["glyf"][g].compile(src["glyf"]), out["glyf"][g].compile(out["glyf"]), g)
         changed = {t for t in src.keys() if t != "GlyphOrder" and src.getTableData(t) != out.getTableData(t)}
         self.assertLessEqual(changed, {"cmap", "name", "head", "GSUB"})
-        self.assertEqual(table_xml(src, "GSUB"), table_xml(out, "GSUB"))
+        # GSUB only gains the repaired ligature (I zero → H also for the frozen glyphs)
+        src_lookups, out_lookups = src["GSUB"].table.LookupList.Lookup, out["GSUB"].table.LookupList.Lookup
+        for a, b in zip(src_lookups, out_lookups):
+            if a.LookupType != 4:
+                self.assertEqual(a.SubTable[0].__dict__, b.SubTable[0].__dict__)
+        ligatures = next(b for b in out_lookups if b.LookupType == 4).SubTable[0].ligatures
+        self.assertEqual([(lig.Component, lig.LigGlyph) for lig in ligatures["I.ss01"]], [(["zero.ss01"], "H")])
         self.assertEqual(out["name"].getDebugName(0), fx.COPYRIGHT)
 
     def test_otf_passthrough(self):
@@ -204,6 +210,43 @@ class CorruptFontTest(unittest.TestCase):
             for call in (lambda d: inspect(d), lambda d: mint(d, Options(name="X"))):
                 with self.subTest(size=len(data)), self.assertRaises(FontmintError):
                     call(data)
+
+
+class NewOptionsTest(unittest.TestCase):
+    def test_disable(self):
+        files = mint(fx.static_ttf(), Options(name="Mint Sans", disable="liga"))
+        out = fx.open_font(files["MintSans/MintSans-Regular.ttf"])
+        record = next(r for r in out["GSUB"].table.FeatureList.FeatureRecord if r.FeatureTag == "liga")
+        self.assertEqual(record.Feature.LookupListIndex, [])
+
+    def test_freeze_and_disable_same_feature(self):
+        with self.assertRaisesRegex(FontmintError, "can't be frozen and disabled"):
+            mint(fx.static_ttf(), Options(name="X", features="ss01", disable="ss01"))
+
+    def test_axis_dependent_swaps_survive_in_statics(self):
+        # at wght 900 the font shows O for '0' (rvrn); with ss01 on, a text engine still shows O there
+        options = Options(name="Mint Sans", features="ss01", axes={"wght": "400,900"}, formats="ttf", hint=False)
+        p = prepare(fx.axis_swap_variable_ttf(), options)
+        self.assertTrue(any("swaps some glyphs depending on its axes" in w for w in p.warnings))
+        files = mint(fx.axis_swap_variable_ttf(), options)
+        black = fx.open_font(files["MintSans/ttf-unhinted/MintSans-Black.ttf"])
+        regular = fx.open_font(files["MintSans/ttf-unhinted/MintSans-Regular.ttf"])
+        self.assertEqual(black.getBestCmap()[ord("0")], "O")
+        self.assertEqual(regular.getBestCmap()[ord("0")], "zero.ss01")
+
+    def test_monospace_flag(self):
+        files = mint(fx.variable_ttf(), Options(name="Mint Sans", axes={"wght": "400,700"}, formats="ttf", hint=False))
+        regular = fx.open_font(files["MintSans/ttf-unhinted/MintSans-Regular.ttf"])  # every glyph is 600 wide
+        bold = fx.open_font(files["MintSans/ttf-unhinted/MintSans-Bold.ttf"])  # space stays 600, letters grow
+        self.assertEqual((regular["post"].isFixedPitch, bold["post"].isFixedPitch), (1, 0))
+
+    def test_long_family_name_warns(self):
+        p = prepare(fx.variable_ttf(), Options(name="A Rather Long Family Name", axes={"wght": "700", "wdth": "75"}))
+        self.assertTrue(any("longer than 31 characters" in w for w in p.warnings))
+
+    def test_partial_and_unfreezable_warnings(self):
+        p = prepare(fx.variable_ttf(), Options(name="Mint Sans", features="liga"))
+        self.assertTrue(any("changed no characters" in w for w in p.warnings))
 
 
 class AutohintFailureTest(unittest.TestCase):

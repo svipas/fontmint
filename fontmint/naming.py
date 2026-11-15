@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fontTools.ttLib import TTFont
 
-from .common import FontmintError
+from .common import FontmintError, get_name
 
 WEIGHT_NAMES = {
     100: "Thin", 200: "ExtraLight", 300: "Light", 400: "Regular", 500: "Medium",
@@ -19,6 +19,9 @@ WIDTHS = [
 # designer, description, URLs and license (8–14) are never touched.
 FAMILY_NAME_IDS = {1, 3, 4, 6, 16, 18, 20, 21, 25}
 POSTSCRIPT_NAME_IDS = {6, 20, 25}
+# Localized versions of these would keep identifying the original family.
+LOCALIZED_FAMILY_IDS = {1, 4, 16, 18, 21}
+WINDOWS_FAMILY_LIMIT = 31  # characters in name ID 1 that Windows apps reliably show
 # Characters PostScript names may not contain (besides spaces, which are dropped),
 # plus the ones Windows forbids in file and folder names.
 FORBIDDEN_CHARS = set("[](){}<>/%") | set('\\:*?"|')
@@ -53,11 +56,15 @@ def safe_path_part(text: str) -> str:
     return cleaned.strip(".") or "font"
 
 
-def rename_family(font: TTFont, old: str, new: str) -> None:
+def rename_family(font: TTFont, old: str, new: str) -> list[str]:
     """Replace the family name in the name records that identify the font (and in
-    instance / PostScript names ≥ 256), plus the CFF names of OTF fonts."""
+    instance / PostScript names ≥ 256), plus the CFF names of OTF fonts.
+    Returns warnings about original names that couldn't be replaced."""
     old_ps, new_ps = old.replace(" ", ""), new.replace(" ", "")
-    for rec in font["name"].names:
+    old_ps_name = get_name(font, 6)
+    name = font["name"]
+    name.names = [r for r in name.names if r.nameID not in LOCALIZED_FAMILY_IDS or _is_english(r)]
+    for rec in name.names:
         if rec.nameID not in FAMILY_NAME_IDS and rec.nameID < 256:
             continue
         s = rec.toUnicode()
@@ -70,6 +77,18 @@ def rename_family(font: TTFont, old: str, new: str) -> None:
             s2 = s.replace(old, new)
         if s2 != s:
             rec.string = s2
+
+    # A PostScript name that doesn't contain the family ("FooSANS-Regular" for
+    # "Foo Sans") wasn't touched above; give it the new family plus the old suffix.
+    if old_ps_name and get_name(font, 6) == old_ps_name:
+        old_ps = old_ps_name.partition("-")[0]
+        for rec in name.names:
+            value = rec.toUnicode()
+            if (rec.nameID in POSTSCRIPT_NAME_IDS or rec.nameID == 3 or rec.nameID >= 256) and " " not in value:
+                rec.string = value.replace(old_ps, new_ps)
+        if "CFF " in font:
+            cff = font["CFF "].cff
+            cff.fontNames = [n.replace(old_ps, new_ps) for n in cff.fontNames]
     if "CFF " in font:
         cff = font["CFF "].cff
         top = cff.topDictIndex[0]
@@ -77,6 +96,18 @@ def rename_family(font: TTFont, old: str, new: str) -> None:
         for key in ("FullName", "FamilyName"):
             if value := getattr(top, key, None):
                 setattr(top, key, value.replace(old, new))
+
+    if old in new or old_ps in new_ps:
+        return []
+    leftovers = sorted({r.nameID for r in name.names if r.nameID in FAMILY_NAME_IDS
+                        and (old in r.toUnicode() or old_ps in r.toUnicode())})
+    if leftovers:
+        return [f"name ID(s) {', '.join(map(str, leftovers))} still mention '{old}'; check the result"]
+    return []
+
+
+def _is_english(rec) -> bool:
+    return (rec.platformID, rec.langID) in ((3, 0x409), (1, 0)) or rec.platformID == 0
 
 
 def weight_name(w: float) -> str:
@@ -140,9 +171,7 @@ def set_static_names(font: TTFont, family: str, style: str, weight_class: int, w
     bold = "Bold" in words
     italic = "Italic" in words
     oblique = "Oblique" in words
-    rest = " ".join(w for w in words if w not in LINKED_WORDS)
-    legacy_family = f"{family} {rest}" if rest else family
-    legacy_style = " ".join(w for w, on in (("Bold", bold), ("Italic", italic or oblique)) if on) or "Regular"
+    legacy_family, legacy_style = legacy_names(family, style)
     ps = ps_name(family, style)
 
     name = font["name"]
@@ -166,6 +195,31 @@ def set_static_names(font: TTFont, family: str, style: str, weight_class: int, w
         os2.fsSelection |= 1 << 6
     font["head"].macStyle = (1 if bold else 0) | (2 if italic or oblique else 0)
     return ps
+
+
+def legacy_names(family: str, style: str) -> tuple[str, str]:
+    """(name ID 1, name ID 2): ID 2 keeps only Regular / Bold / Italic, every other
+    style word joins the family in ID 1."""
+    words = style.split()
+    rest = " ".join(w for w in words if w not in LINKED_WORDS)
+    linked = [w for w, on in (("Bold", "Bold" in words), ("Italic", "Italic" in words or "Oblique" in words)) if on]
+    return (f"{family} {rest}" if rest else family), (" ".join(linked) or "Regular")
+
+
+def set_fixed_pitch(font: TTFont) -> None:
+    """Mark a static font as monospaced when every character has the same width -
+    zero-width marks and double-width glyphs (e.g. an ffi ligature) aside - as apps
+    that only list monospace fonts check this."""
+    widths = [font["hmtx"][g][0] for g in set(font.getBestCmap().values())]
+    common = max(set(widths), key=widths.count, default=0)
+    mono = common > 0 and set(widths) <= {0, common, 2 * common}
+    font["post"].isFixedPitch = int(mono)
+    panose = font["OS/2"].panose
+    if panose.bFamilyType == 2:  # Latin text: bProportion 9 means monospaced
+        if mono:
+            panose.bProportion = 9
+        elif panose.bProportion == 9:
+            panose.bProportion = 0
 
 
 def _set(name_table, value: str, name_id: int) -> None:

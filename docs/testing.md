@@ -32,6 +32,8 @@ Only the standard library's `unittest` is used - don't add pytest or other test 
 | `static_otf()`                 | static CFF                                                                                            |
 | `static_woff2()`               | static WOFF2                                                                                          |
 | `symbol_variable_ttf()`        | variable font with only arrow glyphs - ttfautohint refuses it, for testing `--no-hint` and job errors |
+| `mac_cmap_ttf()`               | static font with an old Mac (format 0) cmap and a frozen glyph whose ID is above 255                  |
+| `axis_swap_variable_ttf()`     | variable font whose `0` becomes `O` at heavy weights (an `rvrn` feature variation)                    |
 
 `hinted=True` adds dummy `fpgm`/`prep`/`cvt ` tables and glyph programs: static passthrough must keep them byte for byte, and the `*-unhinted/` outputs of a hinted variable font must have none.
 
