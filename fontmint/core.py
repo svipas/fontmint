@@ -1,14 +1,14 @@
-"""fontmint pipeline — bytes in → bytes out.
+"""fontmint pipeline - bytes in → bytes out.
 
 Nothing here touches the filesystem, parses arguments, prints or exits, so it can
 be used from the CLI, from other Python code, or in a browser (Pyodide).
 
 Static fonts (TTF, OTF, WOFF, WOFF2) pass through: features are frozen and the
-family renamed, nothing else changes — same format, hinting kept, no extra files.
+family renamed, nothing else changes - same format, hinting kept, no extra files.
 
 Variable fonts give:
   - the variable font itself (features frozen, renamed, otherwise unchanged)
-    plus a static font for every named instance — when no axis options are given;
+    plus a static font for every named instance - when no axis options are given;
   - otherwise exactly what the axis options ask for: pinned values → static fonts,
     ranges → trimmed variable fonts.
 
@@ -184,7 +184,7 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
 
 
 def _prepare_static_input(font, options, old_family, frozen, warnings) -> Prepared:
-    """Static input passes through in its own format — nothing else is generated."""
+    """Static input passes through in its own format - nothing else is generated."""
     if options.axes:
         raise FontmintError("axis options (--weight, --width, …) only apply to variable fonts")
     if options.style_name:
@@ -217,7 +217,7 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prep
 
     own = "otf" if cff2 else "ttf"
     if not formats & {own, "woff2"}:
-        hint = f"variable fonts are written as {own}/woff2 — add {own} or woff2 to formats"
+        hint = f"variable fonts are written as {own}/woff2 - add {own} or woff2 to formats"
         if any(j.kind == "variable" for j in jobs):
             raise FontmintError(f"ranges make variable fonts, but {hint}")
         if not options.axes:
@@ -296,7 +296,7 @@ def _describe(tag: str, v) -> str:
 
 
 def _variable_files(font: TTFont, base: str, formats: set[str], cff2: bool) -> dict[str, bytes]:
-    """Variable output: no hinting, no outline conversion — only lossless WOFF2."""
+    """Variable output: no hinting, no outline conversion - only lossless WOFF2."""
     files = {}
     own = "otf" if cff2 else "ttf"
     if own in formats:

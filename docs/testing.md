@@ -8,7 +8,7 @@
 .venv/bin/python -m unittest tests.test_core.AxisOptionsTest.test_style_name
 ```
 
-Only the standard library's `unittest` is used — don't add pytest or other test dependencies.
+Only the standard library's `unittest` is used - don't add pytest or other test dependencies.
 
 ## Layout
 
@@ -23,7 +23,7 @@ Only the standard library's `unittest` is used — don't add pytest or other tes
 
 ## Fixtures
 
-`tests/fixtures.py` builds fonts with fontTools' `FontBuilder` — no binary files in the repo. All are family **"Test Sans"** with rectangle glyphs:
+`tests/fixtures.py` builds fonts with fontTools' `FontBuilder` - no binary files in the repo. All are family **"Test Sans"** with rectangle glyphs:
 
 | Function                       | Font                                                                                                  |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------- |
@@ -31,7 +31,7 @@ Only the standard library's `unittest` is used — don't add pytest or other tes
 | `static_ttf(hinted)`           | static TrueType                                                                                       |
 | `static_otf()`                 | static CFF                                                                                            |
 | `static_woff2()`               | static WOFF2                                                                                          |
-| `symbol_variable_ttf()`        | variable font with only arrow glyphs — ttfautohint refuses it, for testing `--no-hint` and job errors |
+| `symbol_variable_ttf()`        | variable font with only arrow glyphs - ttfautohint refuses it, for testing `--no-hint` and job errors |
 
 `hinted=True` adds dummy `fpgm`/`prep`/`cvt ` tables and glyph programs: static passthrough must keep them byte for byte, and the `*-unhinted/` outputs of a hinted variable font must have none.
 

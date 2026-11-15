@@ -24,7 +24,7 @@ def parse_features(features: str) -> list[str]:
 
 def freeze_features(font: TTFont, features: str) -> int:
     """Remap the cmap so the given GSUB single/alternate substitutions become the
-    default glyphs. Only the cmap changes — outlines, hinting and layout tables
+    default glyphs. Only the cmap changes - outlines, hinting and layout tables
     are untouched. Returns the number of characters remapped."""
     tags = parse_features(features)
     missing = [f for f in tags if f not in list_features(font)]

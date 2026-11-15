@@ -1,4 +1,4 @@
-"""fontmint command line — arguments, files and parallel builds around fontmint.core.
+"""fontmint command line - arguments, files and parallel builds around fontmint.core.
 
 Examples:
     # show axes, named instances and features
@@ -117,8 +117,8 @@ def list_features(path: Path) -> None:
     else:
         axes = ", ".join(f"{t} {lo:g}–{hi:g} (default {d:g})" for t, lo, d, hi in info.axes)
         print(f"  axes:      {axes}")
-        print(f"  instances: {', '.join(name for name, _ in info.instances) or '—'}")
-    print(f"  features:  {' '.join(info.features) or '—'}")
+        print(f"  instances: {', '.join(name for name, _ in info.instances) or '-'}")
+    print(f"  features:  {' '.join(info.features) or '-'}")
 
 
 def package_version() -> str:
@@ -200,7 +200,7 @@ def run(args: argparse.Namespace) -> None:
     paths = Counter(p for _, prepared in prepared_fonts for p in core.output_paths(prepared))
     if clashes := sorted(p for p, n in paths.items() if n > 1):
         folder, name = clashes[0].split("/")[0], clashes[0].split("/")[-1]
-        raise FontmintError(f"two inputs would both write {name} into {folder}/ — the same font given twice, "
+        raise FontmintError(f"two inputs would both write {name} into {folder}/ - the same font given twice, "
                             "or different families with the same --name")
 
     for path, prepared in prepared_fonts:

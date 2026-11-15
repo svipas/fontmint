@@ -294,7 +294,7 @@ class AxisOptionsTest(unittest.TestCase):
                          {"woff2-unhinted", "woff2-hinted"})
 
     def test_range_with_only_otf_is_reported(self):
-        """Variable fonts are written as TTF/WOFF2 only — asking for a range in OTF
+        """Variable fonts are written as TTF/WOFF2 only - asking for a range in OTF
         alone would silently produce nothing."""
         with self.assertRaisesRegex(FontmintError, "variable fonts are written as ttf/woff2"):
             self.build(axes={"wght": "300:700"}, formats={"otf"})
@@ -373,7 +373,7 @@ class InspectTest(unittest.TestCase):
 class NativeHelpersOptionalTest(unittest.TestCase):
     def test_no_native_modules_when_disabled(self):
         """With hint/remove_overlaps/subroutinize off, ttfautohint, skia-pathops and
-        cffsubr are never imported — the core can run where they don't exist."""
+        cffsubr are never imported - the core can run where they don't exist."""
         code = (
             "import sys\n"
             "from tests import fixtures as fx\n"

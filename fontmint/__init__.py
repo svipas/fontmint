@@ -1,4 +1,4 @@
-"""fontmint — mint your own builds of the fonts you use.
+"""fontmint - mint your own builds of the fonts you use.
 
 Use the `fontmint` command, or the library:
 

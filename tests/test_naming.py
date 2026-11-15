@@ -100,7 +100,7 @@ class RenameFamilyTest(unittest.TestCase):
         self.assertIn("Test Sans", font["name"].getDebugName(13))
 
     def test_single_word_family(self):
-        """'Inter' is both the display and PostScript form — each name kind must get the right one."""
+        """'Inter' is both the display and PostScript form - each name kind must get the right one."""
         font = fx.open_font(fx.static_ttf())
         name = font["name"]
         for i, value in ((1, "Inter Medium"), (16, "Inter"), (17, "Medium"), (4, "Inter Medium"),

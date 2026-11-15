@@ -2,7 +2,7 @@
 
 fontmint is a Python CLI and library for making your own builds of fonts. It freezes OpenType features (so `ss02` or `zero` become the default glyphs), renames the family, and exports variable fonts as variable + static TTF (hinted and unhinted), OTF and WOFF2 at any axis value.
 
-You can think of fontmint as "take the font you like and make it yours" — without opening a font editor.
+You can think of fontmint as "take the font you like and make it yours" - without opening a font editor.
 
 ## What makes fontmint special?
 
@@ -10,7 +10,7 @@ People use fontmint on fonts they rely on every day, for their editor, their ter
 
 ### 1. We don't break fonts
 
-Whatever fontmint writes must install and render correctly. Static input passes through untouched apart from the frozen features and the new name: same format, original hinting kept, no extra files. Variable output is only frozen and renamed — never hinted, never outline-converted. When in doubt, change less.
+Whatever fontmint writes must install and render correctly. Static input passes through untouched apart from the frozen features and the new name: same format, original hinting kept, no extra files. Variable output is only frozen and renamed - never hinted, never outline-converted. When in doubt, change less.
 
 ### 2. We respect licenses
 
@@ -22,7 +22,7 @@ One command, sensible defaults. Long options only, clear errors, no half-written
 
 ### 4. A pure core
 
-The font logic is bytes in, bytes out. It never prints, exits or touches the filesystem, and its native helpers are optional. That keeps it usable as a library and leaves the door open for a browser build (Pyodide) — not planned yet, but not to be closed off by accident.
+The font logic is bytes in, bytes out. It never prints, exits or touches the filesystem, and its native helpers are optional. That keeps it usable as a library and leaves the door open for a browser build (Pyodide) - not planned yet, but not to be closed off by accident.
 
 ## How to approach changes
 
@@ -35,7 +35,7 @@ The rest of this document helps you navigate the codebase and make changes effec
 ## A small glossary
 
 - **you** means the agent reading this file and changing fontmint.
-- **we** and **maintainers** mean the people building fontmint — who you are talking to now.
+- **we** and **maintainers** mean the people building fontmint - who you are talking to now.
 - **user** means the person running fontmint on their fonts.
 - **static input** means a non-variable TTF, OTF, WOFF or WOFF2 file. It passes through.
 - **variable input** means a font with an `fvar` table. It is the only input that produces static fonts, trimmed fonts and extra formats.
@@ -53,15 +53,15 @@ The rest of this document helps you navigate the codebase and make changes effec
 
 ## Where code lives
 
-- `fontmint/core.py` — the pipeline: `Options` → `prepare()` → `Prepared` (files + jobs) → `build_job()`. Also `mint()` and `inspect()`.
-- `fontmint/axes.py` — axis values (`400,700`, `300:700`, `all`) and their combinations.
-- `fontmint/features.py` — listing and freezing GSUB features.
-- `fontmint/naming.py` — family renaming, style names, name records, weight/width classes.
-- `fontmint/convert.py` — TrueType → OTF and autohinting. The only module that uses native helpers.
-- `fontmint/common.py` — `FontmintError`, `FORMATS`, loading/saving fonts.
-- `fontmint/cli.py` — argparse, file I/O, parallel builds. Its module docstring is the `--help` epilog.
-- `tests/` — `unittest` suite; `tests/fixtures.py` builds tiny fonts in code.
-- `assets/` — the logo and `make_logo.py`, which regenerates it.
+- `fontmint/core.py` - the pipeline: `Options` → `prepare()` → `Prepared` (files + jobs) → `build_job()`. Also `mint()` and `inspect()`.
+- `fontmint/axes.py` - axis values (`400,700`, `300:700`, `all`) and their combinations.
+- `fontmint/features.py` - listing and freezing GSUB features.
+- `fontmint/naming.py` - family renaming, style names, name records, weight/width classes.
+- `fontmint/convert.py` - TrueType → OTF and autohinting. The only module that uses native helpers.
+- `fontmint/common.py` - `FontmintError`, `FORMATS`, loading/saving fonts.
+- `fontmint/cli.py` - argparse, file I/O, parallel builds. Its module docstring is the `--help` epilog.
+- `tests/` - `unittest` suite; `tests/fixtures.py` builds tiny fonts in code.
+- `assets/` - the logo.
 
 Dependency direction: `common` ← `features` / `naming` / `axes` / `convert` ← `core` ← `cli`. Nothing imports `cli`.
 
@@ -116,8 +116,8 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 - `Qu2CuPen(all_cubic=True)` raises `NotImplementedError` on contours without on-curve points (common after overlap removal). `ttf_to_otf` falls back to exact conversion for that glyph.
 - opentype-feature-freezer logs a warning for every alternate without a character. `features.py` silences its logger while freezing.
 - One-word families ("Inter") make display and PostScript names look identical. Renaming decides by name ID, not by spaces alone.
-- Quote file names with brackets (`'OpenSans[wdth,wght].ttf'`) in examples — zsh treats brackets as patterns. Don't quote real globs (`InterVariable*.ttf`), or the shell won't expand them.
+- Quote file names with brackets (`'OpenSans[wdth,wght].ttf'`) in examples - zsh treats brackets as patterns. Don't quote real globs (`InterVariable*.ttf`), or the shell won't expand them.
 - ttfautohint fails on fonts without Latin reference glyphs (icon fonts). `convert.autohint` turns that into a `FontmintError` pointing at `--no-hint`.
-- A variable font can ship its own hinting. `*-hinted/` keeps it and `*-unhinted/` strips it (`convert.strip_hinting`); ttfautohint only runs for unhinted sources. A lone 7-byte `prep` + `gasp` (gftools' scan control, e.g. in JetBrains Mono) is **not** hinting — `convert.has_hinting` looks for `fpgm`, `cvt ` or glyph programs.
+- A variable font can ship its own hinting. `*-hinted/` keeps it and `*-unhinted/` strips it (`convert.strip_hinting`); ttfautohint only runs for unhinted sources. A lone 7-byte `prep` + `gasp` (gftools' scan control, e.g. in JetBrains Mono) is **not** hinting - `convert.has_hinting` looks for `fpgm`, `cvt ` or glyph programs.
 - Names read from a font (family, PostScript name) are untrusted: anything that becomes a path goes through `naming.safe_path_part`. `--name` is validated by `naming.check_name` instead.
-- `common.load(check=True)` decompiles every table on a throwaway copy to catch damaged files, then returns a fresh lazy font — decompiled tables get re-serialized on save, which would change pass-through fonts.
+- `common.load(check=True)` decompiles every table on a throwaway copy to catch damaged files, then returns a fresh lazy font - decompiled tables get re-serialized on save, which would change pass-through fonts.

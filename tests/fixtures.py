@@ -1,4 +1,4 @@
-"""Tiny test fonts, built in code — no binary fixtures in the repo.
+"""Tiny test fonts, built in code - no binary fixtures in the repo.
 
 Every font is a family called "Test Sans" with a handful of rectangle glyphs:
 
@@ -189,7 +189,7 @@ def variable_ttf(italic: bool = False, hinted: bool = False, scan_control: bool 
 
 @cache
 def symbol_variable_ttf() -> bytes:
-    """Variable font with only arrow glyphs — ttfautohint refuses to hint it."""
+    """Variable font with only arrow glyphs - ttfautohint refuses to hint it."""
     fb = _builder(True, SYMBOLS, SYMBOLS_CMAP, "", italic=False, hinted=False)
     _add_variations(fb, SYMBOLS, italic=False)
     return _save(fb.font)
