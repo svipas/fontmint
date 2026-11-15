@@ -266,6 +266,19 @@ class DisableTest(unittest.TestCase):
         swap = font["GSUB"].table.FeatureVariations.FeatureVariationRecord[0].FeatureTableSubstitution
         self.assertEqual(swap.SubstitutionRecord[0].Feature.LookupListIndex, [])
 
+    def test_scripts_left_without_features_stay(self):
+        # without its own entry, Latin text would get DFLT's positioning instead
+        font = fx.open_font(fx.static_ttf())
+        addOpenTypeFeaturesFromString(font, "languagesystem DFLT dflt; languagesystem latn dflt;"
+                                            "feature kern { script latn; pos H O -50; } kern;"
+                                            "feature dist { script DFLT; pos H 10; } dist;", tables=["GPOS"])
+        disable_features(font, ["kern"])
+        font = fx.open_font(fx._save(font))
+        gpos = font["GPOS"].table
+        latn = next(s.Script for s in gpos.ScriptList.ScriptRecord if s.ScriptTag == "latn")
+        self.assertEqual([gpos.FeatureList.FeatureRecord[i].Feature.LookupListIndex
+                          for i in latn.DefaultLangSys.FeatureIndex], [[]])
+
     def test_disable_unknown(self):
         with self.assertRaisesRegex(FontmintError, "no feature.*kern"):
             disable_features(fx.open_font(fx.static_ttf()), ["kern"])
