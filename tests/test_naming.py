@@ -1,0 +1,170 @@
+import unittest
+
+from fontmint.common import FontmintError
+from fontmint.naming import (
+    apply_style_name,
+    check_name,
+    normalize_style,
+    ps_name,
+    rename_family,
+    set_static_names,
+    style_from_location,
+    weight_name,
+    width_class,
+    width_name,
+)
+
+from . import fixtures as fx
+
+
+class StyleNameTest(unittest.TestCase):
+    def test_weights(self):
+        self.assertEqual(style_from_location({"wght": 400}, set(), False), "Regular")
+        self.assertEqual(style_from_location({"wght": 700}, set(), False), "Bold")
+        self.assertEqual(style_from_location({"wght": 375}, set(), False), "W375")
+        self.assertEqual(style_from_location({}, set(), False), "Regular")
+
+    def test_widths(self):
+        self.assertEqual(style_from_location({"wght": 400, "wdth": 75}, set(), False), "Condensed")
+        self.assertEqual(style_from_location({"wght": 700, "wdth": 75}, set(), False), "Condensed Bold")
+        self.assertEqual(style_from_location({"wght": 400, "wdth": 100}, set(), False), "Regular")
+        self.assertEqual(style_from_location({"wght": 400, "wdth": 80}, set(), False), "Wdth80")
+
+    def test_italic_and_slant(self):
+        self.assertEqual(style_from_location({"wght": 400}, set(), True), "Italic")
+        self.assertEqual(style_from_location({"wght": 700}, set(), True), "Bold Italic")
+        self.assertEqual(style_from_location({"wght": 400, "ital": 1}, set(), False), "Italic")
+        self.assertEqual(style_from_location({"wght": 400, "slnt": -10}, set(), False), "Oblique")
+        self.assertEqual(style_from_location({"wght": 700, "wdth": 75}, set(), True), "Condensed Bold Italic")
+
+    def test_several_slants_get_labels(self):
+        self.assertEqual(style_from_location({"wght": 400, "slnt": -5}, {"slnt"}, False), "Slnt-5 Oblique")
+        self.assertEqual(style_from_location({"wght": 400, "slnt": 0}, {"slnt"}, False), "Slnt0")
+
+    def test_labeled_extra_axes(self):
+        self.assertEqual(style_from_location({"wght": 400, "opsz": 32}, {"opsz"}, False), "Opsz32")
+        self.assertEqual(style_from_location({"wght": 700, "MONO": 1}, {"MONO"}, False), "Bold MONO1")
+        # an extra axis with a single value isn't labeled
+        self.assertEqual(style_from_location({"wght": 700, "opsz": 32}, set(), False), "Bold")
+
+    def test_regular_is_dropped_next_to_other_words(self):
+        self.assertEqual(normalize_style("Condensed Regular"), "Condensed")
+        self.assertEqual(normalize_style("Regular Italic"), "Italic")
+        self.assertEqual(normalize_style("Regular"), "Regular")
+
+    def test_style_name_override(self):
+        self.assertEqual(apply_style_name("Regular", False), "Regular")
+        self.assertEqual(apply_style_name("Regular", True), "Italic")
+        self.assertEqual(apply_style_name("Book", True), "Book Italic")
+        self.assertEqual(apply_style_name("Bold Italic", True), "Bold Italic")
+
+    def test_helpers(self):
+        self.assertEqual(weight_name(400), "Regular")
+        self.assertEqual(weight_name(400.5), "W400.5")
+        self.assertEqual(width_name(87.5), "SemiCondensed")
+        self.assertEqual(width_name(100), "")
+        self.assertEqual([width_class(v) for v in (50, 75, 80, 100, 125, 200)], [1, 3, 3, 5, 7, 9])
+
+
+class NameValidationTest(unittest.TestCase):
+    def test_valid(self):
+        for name in ("Inter Clear", "JetBrains Mono 2", "Foo-Bar", "A.B"):
+            check_name(name, "--name")
+
+    def test_invalid(self):
+        for name in ("Clär", "a/../../b", "Foo (Alt)", "50%", "..", " ", "Foo:Bar", 'a"b', "x|y", "back\\slash"):
+            with self.subTest(name=name), self.assertRaises(FontmintError):
+                check_name(name, "--name")
+
+    def test_postscript_length(self):
+        self.assertEqual(ps_name("Mint Sans", "Bold Italic"), "MintSans-BoldItalic")
+        with self.assertRaisesRegex(FontmintError, "longer than 63"):
+            ps_name("A" * 60, "Bold")
+
+
+class RenameFamilyTest(unittest.TestCase):
+    def test_identifying_names_change(self):
+        font = fx.open_font(fx.static_ttf())
+        rename_family(font, "Test Sans", "Mint Sans")
+        name = font["name"]
+        self.assertEqual(name.getDebugName(1), "Mint Sans")
+        self.assertEqual(name.getDebugName(4), "Mint Sans Regular")
+        self.assertEqual(name.getDebugName(6), "MintSans-Regular")
+        self.assertEqual(name.getDebugName(3), "1.000;TEST;MintSans-Regular")
+
+    def test_notices_never_change(self):
+        font = fx.open_font(fx.static_ttf())
+        rename_family(font, "Test Sans", "Mint Sans")
+        self.assertEqual(font["name"].getDebugName(0), fx.COPYRIGHT)
+        self.assertEqual(font["name"].getDebugName(7), fx.TRADEMARK)
+        self.assertIn("Test Sans", font["name"].getDebugName(13))
+
+    def test_single_word_family(self):
+        """'Inter' is both the display and PostScript form — each name kind must get the right one."""
+        font = fx.open_font(fx.static_ttf())
+        name = font["name"]
+        for i, value in ((1, "Inter Medium"), (16, "Inter"), (17, "Medium"), (4, "Inter Medium"),
+                         (6, "Inter-Medium"), (3, "1.000;TEST;Inter-Medium")):
+            name.setName(value, i, 3, 1, 0x409)
+        rename_family(font, "Inter", "Foo New")
+        self.assertEqual(name.getDebugName(1), "Foo New Medium")
+        self.assertEqual(name.getDebugName(16), "Foo New")
+        self.assertEqual(name.getDebugName(6), "FooNew-Medium")
+        self.assertEqual(name.getDebugName(3), "1.000;TEST;FooNew-Medium")
+
+    def test_cff_names_follow(self):
+        font = fx.open_font(fx.static_otf())
+        rename_family(font, "Test Sans", "Mint Sans")
+        cff = font["CFF "].cff
+        self.assertEqual(cff.fontNames, ["MintSans-Regular"])
+        self.assertEqual(cff.topDictIndex[0].FamilyName, "Mint Sans")
+        self.assertEqual(cff.topDictIndex[0].FullName, "Mint Sans Regular")
+
+    def test_variable_instance_names(self):
+        font = fx.open_font(fx.variable_ttf())
+        rename_family(font, "Test Sans", "Mint Sans")
+        names = {r.toUnicode() for r in font["name"].names if r.nameID >= 256}
+        self.assertIn("Condensed Bold", names)  # instance styles untouched
+        self.assertEqual(font["name"].getDebugName(6), "MintSans-Regular")
+
+
+class SetStaticNamesTest(unittest.TestCase):
+    def names(self, style, weight=400, width=None):
+        font = fx.open_font(fx.static_ttf())
+        ps = set_static_names(font, "Mint Sans", style, weight, width)
+        n = font["name"]
+        return ps, font, {i: n.getDebugName(i) for i in (1, 2, 4, 6, 16, 17)}
+
+    def test_ribbi(self):
+        ps, font, n = self.names("Bold Italic", 700)
+        self.assertEqual(ps, "MintSans-BoldItalic")
+        self.assertEqual((n[1], n[2], n[16], n[17]), ("Mint Sans", "Bold Italic", None, None))
+        self.assertEqual(font["OS/2"].fsSelection & 0b100001, 0b100001)  # italic + bold bits
+        self.assertEqual(font["head"].macStyle, 3)
+
+    def test_bold_links_within_its_width(self):
+        ps, font, n = self.names("Condensed Bold", 700, 3)
+        self.assertEqual(ps, "MintSans-CondensedBold")
+        self.assertEqual((n[1], n[2], n[16], n[17]), ("Mint Sans Condensed", "Bold", "Mint Sans", "Condensed Bold"))
+        self.assertEqual((font["OS/2"].usWidthClass, font["OS/2"].usWeightClass), (3, 700))
+        self.assertTrue(font["OS/2"].fsSelection & (1 << 5))  # bold bit, so Ctrl+B in "Condensed" finds it
+
+    def test_non_linked_weight(self):
+        ps, font, n = self.names("SemiBold Italic", 600)
+        self.assertEqual((n[1], n[2], n[16], n[17]), ("Mint Sans SemiBold", "Italic", "Mint Sans", "SemiBold Italic"))
+        self.assertFalse(font["OS/2"].fsSelection & (1 << 5))
+
+    def test_custom_weight_keeps_real_weight_class(self):
+        _, font, n = self.names("Regular", 375)
+        self.assertEqual(n[2], "Regular")
+        self.assertEqual(font["OS/2"].usWeightClass, 375)
+        self.assertTrue(font["OS/2"].fsSelection & (1 << 6))  # REGULAR bit
+
+    def test_oblique(self):
+        _, font, n = self.names("Oblique")
+        self.assertEqual((n[1], n[2], n[16], n[17]), ("Mint Sans", "Italic", "Mint Sans", "Oblique"))
+        self.assertTrue(font["OS/2"].fsSelection & (1 << 9))  # OBLIQUE bit
+
+
+if __name__ == "__main__":
+    unittest.main()
