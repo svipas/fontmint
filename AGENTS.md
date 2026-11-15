@@ -40,7 +40,7 @@ The rest of this document helps you navigate the codebase and make changes effec
 - **static input** means a non-variable TTF, OTF, WOFF or WOFF2 file. It passes through.
 - **variable input** means a font with an `fvar` table. It is the only input that produces static fonts, trimmed fonts and extra formats.
 - **named instance** means a style the font's designer defined in `fvar` (e.g. "Condensed Bold"). Without axis options, fontmint builds one static font per named instance.
-- **freeze** means remapping the character map so a GSUB substitution becomes the default glyph, then updating ligatures and context rules so they still work with the frozen glyphs.
+- **freeze** means remapping the character map so a GSUB substitution becomes the default glyph, then updating ligatures and context rules so they still work with the frozen glyphs. Rules the character map can't hold are added to `calt` (or `liga`).
 - **trimmed variable font** means a variable font whose axes were limited by a range (`--weight 300:700`).
 - **job** means one output built from a variable font, run in a worker process.
 

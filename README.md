@@ -284,7 +284,7 @@ Options also take the same text as the command line, like `features="ss02,cv47=2
 
 ## Limitations
 
-- Only features that replace one glyph with another can be frozen (`ssXX`, `cvXX`, `zero`, `tnum`, …). Ligatures (several characters joined into one glyph) and contextual features (which depend on the neighboring characters) can't be frozen, but they can be turned off with `--disable`. fontmint warns when a feature is only partly frozen or changes nothing.
+- Only rules that replace one glyph with another can be frozen everywhere (`ssXX`, `cvXX`, `zero`, `tnum`, …). Rules for ligatures (several characters joined into one glyph) or that depend on the neighboring characters are added to the font's default features instead, so they work in most apps, but not in editors and terminals with ligatures turned off. fontmint tells you when that happens.
 - Freezing also updates ligatures and other rules that use the frozen characters. In rare cases a rule can't be updated; fontmint warns when that happens.
 - Font collections (`.ttc`) aren't supported; extract the fonts from them first.
 

@@ -18,6 +18,10 @@ from fontTools.ttLib.tables import otTables
 from .common import FontmintError, get_name
 
 CONTEXTUAL_TYPES = {5, 6, 8}  # contextual, chained contextual, reverse chained
+# Scripts whose features text engines apply in a single pass, so a lookup added to calt
+# still runs at its place in the lookup list. Arabic or Indic engines run features in
+# stages, where moving a lookup to another feature can change when it runs.
+SINGLE_PASS_SCRIPTS = {"DFLT", "latn", "grek", "cyrl"}
 
 
 @dataclass
@@ -25,6 +29,7 @@ class FreezeResult:
     remapped: int = 0  # characters whose glyph changed
     glyph_map: dict[str, str] = field(default_factory=dict)  # old default glyph → frozen glyph
     partial: list[str] = field(default_factory=list)  # features with rules that can't be frozen
+    moved: list[str] = field(default_factory=list)  # features whose unfreezable rules were added to calt/liga
     stale_rules: int = 0  # ligature/context lookups that still expect the replaced glyphs
     outputs_changed: int = 0  # other rules' output glyphs now given in their frozen form
 
@@ -112,21 +117,21 @@ def freeze_features(font: TTFont, spec: dict[str, int] | str, language: str = ""
         for index in _feature_lookups(gsub, tag, language):
             lookup_value.setdefault(index, (tag, value))
     maps: list[tuple[int, dict[str, str]]] = []  # (run position, glyph → glyph), in the order engines run them
-    partial: set[str] = set()
+    leftover: dict[str, set[int]] = {}  # tag → lookups with rules that can't be frozen
     most_alternates: dict[str, int] = {}
     for index in sorted(lookup_value, key=lambda i: (position[i], i)):
         tag, value = lookup_value[index]
         mapping, unsupported, alternates = _one_to_one_map(lookups[index], value)
         most_alternates[tag] = max(most_alternates.get(tag, 0), alternates)
         if unsupported:
-            partial.add(tag)
+            leftover.setdefault(tag, set()).add(index)
         if mapping:
             maps.append((position[index], mapping))
     for tag, value in spec.items():
         if value > 1 and most_alternates[tag] < value:
             offers = f"offers at most {most_alternates[tag]} alternates" if most_alternates[tag] else "has no alternates"
             raise FontmintError(f"{tag} {offers}, so {tag}={value} isn't possible")
-    result.partial = sorted(partial)
+    result.partial = sorted(leftover)
 
     def resolve(glyph: str) -> str:
         for _, mapping in maps:
@@ -172,7 +177,56 @@ def freeze_features(font: TTFont, spec: dict[str, int] | str, language: str = ""
         result.outputs_changed = _repair(gsub, position, maps[-1][0], repairable, first_change, resolve_after,
                                          glyph_ids)
         result.stale_rules = _count_stale(gsub, position, result.glyph_map, first_change)
+    result.moved = [tag for tag in result.partial if _move_to_calt(gsub, tag, leftover[tag], spec[tag])]
     return result
+
+
+def _move_to_calt(gsub, tag: str, indices: set[int], value: int) -> bool:
+    """Add a frozen feature's lookups that can't be frozen to calt (or liga, if a script
+    has no calt), which apps turn on by default but usually off together with
+    ligatures, in the scripts that use the feature. They keep their place in the lookup list, so they run as in the original
+    with the feature on. Returns whether any were added."""
+    lookups = gsub.LookupList.Lookup
+    if value > 1:  # apps would pick the first alternate of any alternate lookup these call
+        indices = {i for i in indices if not any(lookups[n].LookupType == 3 for n in _called(lookups, i))}
+    records = gsub.FeatureList.FeatureRecord
+    targets = set()
+    for script in _scripts(gsub):
+        if script.ScriptTag not in SINGLE_PASS_SCRIPTS:
+            continue
+        systems = [script.Script.DefaultLangSys] if script.Script.DefaultLangSys else []
+        systems += [lang.LangSys for lang in script.Script.LangSysRecord]
+        features = {i for system in systems for i in system.FeatureIndex}
+        if any(records[i].FeatureTag == tag for i in features):
+            for host in ("calt", "liga"):  # both on by default; liga for fonts without calt (e.g. Recursive)
+                if found := {i for i in features if records[i].FeatureTag == host}:
+                    targets |= found
+                    break
+    if not indices or not targets:
+        return False
+    features = [records[i].Feature for i in targets]
+    variations = getattr(gsub, "FeatureVariations", None)
+    for variation in getattr(variations, "FeatureVariationRecord", None) or []:
+        features += [sub.Feature for sub in variation.FeatureTableSubstitution.SubstitutionRecord
+                     if sub.FeatureIndex in targets]
+    added = False
+    for feature in features:
+        if not indices <= set(feature.LookupListIndex):  # e.g. not when freezing liga itself
+            feature.LookupListIndex = sorted(set(feature.LookupListIndex) | indices)
+            feature.LookupCount = len(feature.LookupListIndex)
+            added = True
+    return added
+
+
+def _called(lookups, index: int) -> set[int]:
+    """A lookup and every lookup its context rules call, directly or not."""
+    seen, todo = set(), [index]
+    while todo:
+        i = todo.pop()
+        if i not in seen:
+            seen.add(i)
+            todo += [n for subtable, kind in _subtables(lookups[i]) if kind in (5, 6) for n in _nested_lookups(subtable)]
+    return seen
 
 
 def disable_features(font: TTFont, tags: list[str]) -> None:

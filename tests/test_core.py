@@ -268,6 +268,12 @@ class NewOptionsTest(unittest.TestCase):
         addOpenTypeFeaturesFromString(font, "feature ss03 { sub zero by zero.ss01; sub I' zero by I.ss01; } ss03;")
         p = prepare(fx._save(font), Options(name="Mint Sans", features="ss03"))
         self.assertTrue(any("ss03: only the one-to-one swaps were frozen" in w for w in p.warnings))
+        font = fx.open_font(fx.static_ttf())
+        del font["GSUB"]
+        addOpenTypeFeaturesFromString(font, "feature liga { sub I O by H; } liga; feature ss03 { sub I' zero by I.ss01; } ss03;")
+        p = prepare(fx._save(font), Options(name="Mint Sans", features="ss03"))
+        self.assertTrue(any("ss03: rules that can't be frozen" in w and "ligatures turned off" in w
+                            for w in p.warnings), p.warnings)
 
     def test_disabling_text_features_warns(self):
         p = prepare(fx.static_ttf(), Options(name="Mint Sans", disable="liga"))

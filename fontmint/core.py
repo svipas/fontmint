@@ -230,12 +230,17 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
 
 def _freeze_warnings(features: str, result: FreezeResult) -> list[str]:
     warnings = []
-    if result.remapped == 0 and result.outputs_changed == 0:
+    if result.moved:
+        warnings.append(f"{', '.join(result.moved)}: rules that can't be frozen (e.g. ligatures, or swaps that depend "
+                        "on neighboring characters) were added to the font's default features, so they work in most "
+                        "apps - but not in editors and terminals with ligatures turned off")
+    not_moved = [tag for tag in result.partial if tag not in result.moved]
+    if result.remapped == 0 and result.outputs_changed == 0 and not result.moved:
         warnings.append(f"'{features}' changed nothing: it only changes ligatures, or glyphs that depend on "
                         "neighboring characters, which can't be frozen (they can be turned off with --disable)")
-    elif result.partial:
-        warnings.append(f"{', '.join(result.partial)}: only the one-to-one swaps were frozen; the feature's other "
-                        "rules (e.g. for accented letters, ligatures, or swaps that depend on neighboring characters) "
+    elif not_moved:
+        warnings.append(f"{', '.join(not_moved)}: only the one-to-one swaps were frozen; the feature's other rules "
+                        "(e.g. for accented letters, ligatures, or swaps that depend on neighboring characters) "
                         "can't be frozen, so some characters keep their original shape")
     if result.stale_rules:
         warnings.append(f"{result.stale_rules} group(s) of the font's rules can't be updated for the frozen glyphs, "

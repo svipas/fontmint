@@ -217,6 +217,32 @@ class FreezeRepairTest(unittest.TestCase):
         self.assertEqual((cmap[ord("0")], cmap[ord("I")], cmap[ord("H")]), ("zero.ss01", "I.ss01", "H"))
         self.assertEqual((result.remapped, result.partial), (2, ["ss04"]))
 
+    def test_unfreezable_rules_move_to_calt(self):
+        # "I before zero" depends on the next character, so the cmap can't hold it; calt runs it instead
+        rules = "feature ss03 { sub zero by zero.ss01; sub I' zero by I.ss01; } ss03;"
+        for host, fea in (("calt", "feature calt { sub O' I by o; } calt;"), ("liga", "feature liga { sub I O by H; } liga;")):
+            with self.subTest(host=host):
+                font = with_features(fea + rules)
+                result = freeze_features(font, "ss03")
+                self.assertEqual((result.partial, result.moved), (["ss03"], ["ss03"]))
+                ss03 = set(next(r for r in font["GSUB"].table.FeatureList.FeatureRecord
+                                if r.FeatureTag == "ss03").Feature.LookupListIndex)
+                record = next(r for r in font["GSUB"].table.FeatureList.FeatureRecord if r.FeatureTag == host)
+                contextual = {i for i in ss03 if font["GSUB"].table.LookupList.Lookup[i].LookupType == 6}
+                self.assertTrue(contextual and contextual <= set(record.Feature.LookupListIndex))
+
+    def test_rules_stay_put_where_moving_could_change_their_order(self):
+        rules = "feature ss03 { sub zero by zero.ss01; sub I' zero by I.ss01; } ss03;"
+        # Arabic engines run features in stages
+        font = with_features("languagesystem arab dflt; feature calt { sub O' I by o; } calt;" + rules)
+        self.assertEqual(freeze_features(font, "ss03").moved, [])
+        # apps would pick the first alternate, not the second
+        fea = ("lookup ALT { sub I from [I.ss01 H]; } ALT; feature calt { sub O' I by o; } calt;"
+               "feature cv01 { sub zero from [zero.ss01 O]; sub I' lookup ALT zero; } cv01;")
+        result = freeze_features(with_features(fea), "cv01=2")
+        self.assertEqual((result.partial, result.moved), (["cv01"], []))
+        self.assertEqual(freeze_features(with_features(fea), "cv01").moved, ["cv01"])  # the first alternate is fine
+
     def test_partial_features_are_reported(self):
         font = with_features("feature ss03 { sub zero by zero.ss01; sub I' zero by I.ss01; } ss03;")
         result = freeze_features(font, "ss03")
