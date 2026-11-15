@@ -69,14 +69,14 @@ Named instances use the designer's subfamily name. Fonts built from axis values 
 
 Plus ID 3 (`version;PSName`), 4 (`Family Style`), 6 (PostScript name); `usWeightClass` = the real weight (375 stays 375 even when styled `Regular`); `usWidthClass` from `wdth`; `fsSelection` bold (when the style contains `Bold`), italic, regular and oblique bits; `head.macStyle`.
 
-A static font is marked monospaced (`post.isFixedPitch`, and PANOSE proportion for Latin text fonts) when all its characters have one width, ignoring zero-width marks and double-width glyphs. Family names (ID 1) longer than 31 characters produce a warning, because some Windows apps cut them off.
+A static font is marked monospaced (`post.isFixedPitch`, and PANOSE proportion for Latin text fonts) when all its characters have one width, ignoring zero-width marks and double-width glyphs. The flag is only ever set, never cleared, so a designer's own setting stays. Family names (ID 1) longer than 31 characters produce a warning, for static fonts built from a variable font and for renamed static input, because some Windows apps cut them off.
 
 ## Renaming (all fonts)
 
 `naming.rename_family` replaces the old family in name IDs 1, 3, 4, 6, 16, 18, 20, 21, 25 and ≥ 256, and in the CFF `FontName`, `FullName` and `FamilyName` strings of OTF fonts (replacing inside the existing strings, not re-deriving them). PostScript-style strings get the space-less family. IDs 0, 7 and 8–14 are never touched.
 
 - The old family is read from the English records first (ID 16, then ID 1), so a localized name never becomes the one that gets replaced.
-- A PostScript name that doesn't contain the family (`FooSANS-Regular` for "Foo Sans") gets the new family in front of its old suffix.
+- A PostScript name that doesn't contain the family (`FooSANS-Regular` for "Foo Sans") gets the new family in front of its old suffix. Without a `-` there's no suffix to keep: the name stays and a warning says so.
 - Localized versions of IDs 1, 4, 16, 18 and 21 are removed: they would keep naming the original family.
 - If an identifying name still mentions the old family afterwards, a warning says so.
 

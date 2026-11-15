@@ -4,6 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 
+from fontTools.feaLib.builder import addOpenTypeFeaturesFromString
 from fontTools.misc.xmlWriter import XMLWriter
 
 from fontmint import FontmintError, Options, inspect, mint, prepare
@@ -17,6 +18,16 @@ def table_xml(font, tag: str) -> str:
     buf = io.StringIO()
     font[tag].toXML(XMLWriter(buf), font)
     return buf.getvalue()
+
+
+def rvrn_result(font, glyph: str) -> str:
+    """What a static font's always-on rvrn feature turns `glyph` into."""
+    gsub = font["GSUB"].table
+    for record in gsub.FeatureList.FeatureRecord:
+        if record.FeatureTag == "rvrn":
+            for index in record.Feature.LookupListIndex:
+                glyph = gsub.LookupList.Lookup[index].SubTable[0].mapping.get(glyph, glyph)
+    return glyph
 
 
 def folders(files: dict) -> set[str]:
@@ -40,13 +51,8 @@ class StaticInputTest(unittest.TestCase):
             self.assertEqual(src["glyf"][g].compile(src["glyf"]), out["glyf"][g].compile(out["glyf"]), g)
         changed = {t for t in src.keys() if t != "GlyphOrder" and src.getTableData(t) != out.getTableData(t)}
         self.assertLessEqual(changed, {"cmap", "name", "head", "GSUB"})
-        # GSUB only gains the repaired ligature (I zero → H also for the frozen glyphs)
-        src_lookups, out_lookups = src["GSUB"].table.LookupList.Lookup, out["GSUB"].table.LookupList.Lookup
-        for a, b in zip(src_lookups, out_lookups):
-            if a.LookupType != 4:
-                self.assertEqual(a.SubTable[0].__dict__, b.SubTable[0].__dict__)
-        ligatures = next(b for b in out_lookups if b.LookupType == 4).SubTable[0].ligatures
-        self.assertEqual([(lig.Component, lig.LigGlyph) for lig in ligatures["I.ss01"]], [(["zero.ss01"], "H")])
+        # liga runs after ss01 here, so no rule needs updating: GSUB content is unchanged
+        self.assertEqual(table_xml(src, "GSUB"), table_xml(out, "GSUB"))
         self.assertEqual(out["name"].getDebugName(0), fx.COPYRIGHT)
 
     def test_otf_passthrough(self):
@@ -223,16 +229,20 @@ class NewOptionsTest(unittest.TestCase):
         with self.assertRaisesRegex(FontmintError, "can't be frozen and disabled"):
             mint(fx.static_ttf(), Options(name="X", features="ss01", disable="ss01"))
 
-    def test_axis_dependent_swaps_survive_in_statics(self):
-        # at wght 900 the font shows O for '0' (rvrn); with ss01 on, a text engine still shows O there
+    def test_axis_dependent_swaps_survive(self):
+        # at wght 900 the font shows O for '0' (rvrn runs first); with ss01 on, a text engine still shows O there
+        variable = mint(fx.axis_swap_variable_ttf(), Options(name="Mint Sans", features="ss01", formats="ttf", hint=False))
+        vf = fx.open_font(variable["MintSans/variable/MintSans[wght,wdth].ttf"])
+        gsub = vf["GSUB"].table
+        swap = gsub.FeatureVariations.FeatureVariationRecord[0].FeatureTableSubstitution.SubstitutionRecord[0]
+        mapping = gsub.LookupList.Lookup[swap.Feature.LookupListIndex[0]].SubTable[0].mapping
+        self.assertEqual(mapping.get("zero.ss01"), "O")  # the variable font knows the frozen glyph swaps too
         options = Options(name="Mint Sans", features="ss01", axes={"wght": "400,900"}, formats="ttf", hint=False)
-        p = prepare(fx.axis_swap_variable_ttf(), options)
-        self.assertTrue(any("swaps some glyphs depending on its axes" in w for w in p.warnings))
         files = mint(fx.axis_swap_variable_ttf(), options)
         black = fx.open_font(files["MintSans/ttf-unhinted/MintSans-Black.ttf"])
         regular = fx.open_font(files["MintSans/ttf-unhinted/MintSans-Regular.ttf"])
-        self.assertEqual(black.getBestCmap()[ord("0")], "O")
-        self.assertEqual(regular.getBestCmap()[ord("0")], "zero.ss01")
+        self.assertEqual(rvrn_result(black, "zero.ss01"), "O")  # always-on rvrn turns the frozen '0' into O
+        self.assertEqual(rvrn_result(regular, "zero.ss01"), "zero.ss01")
 
     def test_monospace_flag(self):
         files = mint(fx.variable_ttf(), Options(name="Mint Sans", axes={"wght": "400,700"}, formats="ttf", hint=False))
@@ -244,9 +254,38 @@ class NewOptionsTest(unittest.TestCase):
         p = prepare(fx.variable_ttf(), Options(name="A Rather Long Family Name", axes={"wght": "700", "wdth": "75"}))
         self.assertTrue(any("longer than 31 characters" in w for w in p.warnings))
 
-    def test_partial_and_unfreezable_warnings(self):
+    def test_unfreezable_and_partial_warnings(self):
         p = prepare(fx.variable_ttf(), Options(name="Mint Sans", features="liga"))
-        self.assertTrue(any("changed no characters" in w for w in p.warnings))
+        self.assertTrue(any("changed nothing" in w for w in p.warnings))
+        font = fx.open_font(fx.static_ttf())
+        del font["GSUB"]
+        addOpenTypeFeaturesFromString(font, "feature ss03 { sub zero by zero.ss01; sub I' zero by I.ss01; } ss03;")
+        p = prepare(fx._save(font), Options(name="Mint Sans", features="ss03"))
+        self.assertTrue(any("ss03: only the one-to-one swaps were frozen" in w for w in p.warnings))
+
+    def test_disabling_text_features_warns(self):
+        p = prepare(fx.static_ttf(), Options(name="Mint Sans", disable="liga"))
+        self.assertFalse(any("can break text" in w for w in p.warnings))
+        font = fx.open_font(fx.static_ttf())
+        addOpenTypeFeaturesFromString(font, "feature ccmp { sub O by o; } ccmp;")
+        p = prepare(fx._save(font), Options(name="Mint Sans", disable="ccmp"))
+        self.assertTrue(any("turning off ccmp can break text" in w for w in p.warnings))
+
+    def test_long_name_warning_for_static_input_only_when_long(self):
+        long = prepare(fx.static_ttf(), Options(name="A Rather Long Family Name Indeed"))
+        short = prepare(fx.static_ttf(), Options(name="Mint Sans"))
+        self.assertTrue(any("longer than 31 characters" in w for w in long.warnings))
+        self.assertFalse(any("longer than 31 characters" in w for w in short.warnings))
+
+    def test_monospace_flag_is_never_cleared(self):
+        font = fx.open_font(fx.variable_ttf())
+        font["post"].isFixedPitch = 1  # the designer says monospaced; Bold isn't, by the width check
+        font["OS/2"].panose.bFamilyType = 2
+        files = mint(fx._save(font), Options(name="Mint Sans", axes={"wght": "400,700"}, formats="ttf", hint=False))
+        bold = fx.open_font(files["MintSans/ttf-unhinted/MintSans-Bold.ttf"])
+        regular = fx.open_font(files["MintSans/ttf-unhinted/MintSans-Regular.ttf"])
+        self.assertEqual(bold["post"].isFixedPitch, 1)
+        self.assertEqual(regular["OS/2"].panose.bProportion, 9)
 
 
 class AutohintFailureTest(unittest.TestCase):
@@ -377,7 +416,7 @@ class AxisOptionsTest(unittest.TestCase):
     def test_unfreezable_feature_warns(self):
         p = prepare(fx.variable_ttf(), Options(name="Mint Sans", features="liga"))
         self.assertEqual(p.frozen, 0)
-        self.assertTrue(any("changed no characters" in w for w in p.warnings))
+        self.assertTrue(any("changed nothing" in w for w in p.warnings))
 
     def test_variable_without_name_warns(self):
         p = prepare(fx.variable_ttf(), Options(axes={"wght": "300:700"}))

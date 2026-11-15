@@ -121,6 +121,12 @@ class CliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--weight VALUES", result.stdout)
 
+    def test_disable(self):
+        code, _, err = self.run_cli(self.tmp / "TestSans-Regular.otf", "--disable", "liga", "--name", "Mint Sans",
+                                    "--output", self.out)
+        self.assertEqual(code, 0, err)
+        self.assertIn("disabled liga", err)
+
     def test_list_features(self):
         code, out, _ = self.run_cli(self.tmp / "TestSans[wght,wdth].ttf", self.tmp / "TestSans-Regular.otf",
                                     "--list-features")
@@ -128,6 +134,7 @@ class CliTest(unittest.TestCase):
         self.assertIn("instances: Regular, Bold, Condensed, Condensed Bold", out)
         self.assertIn("static font", out)
         self.assertIn("features:  liga ss01", out)
+        self.assertNotIn("positioning:", out)  # the test fonts have no GPOS features
 
     def test_errors(self):
         cases = [

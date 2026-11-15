@@ -85,11 +85,15 @@ class FreezeOrderTest(unittest.TestCase):
 
     def test_pick_an_alternate(self):
         fea = "feature cv01 { sub zero from [zero.ss01 O o]; } cv01;"
-        for number, expected in ((1, "zero.ss01"), (2, "O"), (3, "o"), (4, "zero")):
+        for number, expected in ((1, "zero.ss01"), (2, "O"), (3, "o")):
             with self.subTest(number=number):
                 font = with_features(fea)
                 freeze_features(font, f"cv01={number}")
                 self.assertEqual(font.getBestCmap()[ord("0")], expected)
+        with self.assertRaisesRegex(FontmintError, "cv01 offers at most 3 alternates"):
+            freeze_features(with_features(fea), "cv01=4")
+        with self.assertRaisesRegex(FontmintError, "ss01 has no alternates"):
+            freeze_features(fx.open_font(fx.static_ttf()), "ss01=2")
 
     def test_script_without_default_language_system(self):
         font = fx.open_font(fx.static_ttf())
@@ -107,13 +111,54 @@ class FreezeOrderTest(unittest.TestCase):
 
 
 class FreezeRepairTest(unittest.TestCase):
-    def test_ligatures_follow_frozen_glyphs(self):
-        font = fx.open_font(fx.static_ttf())
+    def ligatures_after_freezing(self, fea: str) -> dict:
+        font = with_features(fea)
         freeze_features(font, "ss01")
         lookup = next(lk for lk in font["GSUB"].table.LookupList.Lookup if lk.LookupType == 4)
-        ligatures = lookup.SubTable[0].ligatures
+        return lookup.SubTable[0].ligatures
+
+    def test_ligature_before_the_frozen_feature_follows(self):
+        ligatures = self.ligatures_after_freezing("feature liga { sub I zero by H; } liga;"
+                                                  "feature ss01 { sub zero by zero.ss01; sub I by I.ss01; } ss01;")
         self.assertEqual([(lig.Component, lig.LigGlyph) for lig in ligatures["I.ss01"]], [(["zero.ss01"], "H")])
         self.assertIn("I", ligatures)  # the original ligature stays
+
+    def test_ligature_after_the_frozen_feature_stays(self):
+        # the original font with ss01 on never forms this ligature (it sees I.ss01 zero.ss01)
+        ligatures = self.ligatures_after_freezing("feature ss01 { sub zero by zero.ss01; sub I by I.ss01; } ss01;"
+                                                  "feature liga { sub I zero by H; } liga;")
+        self.assertNotIn("I.ss01", ligatures)
+
+    def test_frozen_glyph_with_its_own_character_is_not_repaired(self):
+        # O is typed directly too: teaching the ligature "I O" would change text without the frozen '0'
+        font = with_features("feature liga { sub I zero by H; } liga; feature ss01 { sub zero by O; } ss01;")
+        result = freeze_features(font, "ss01")
+        lookup = next(lk for lk in font["GSUB"].table.LookupList.Lookup if lk.LookupType == 4)
+        self.assertEqual(list(lookup.SubTable[0].ligatures["I"][0].Component), ["zero"])
+        self.assertEqual(len(lookup.SubTable[0].ligatures["I"]), 1)
+        self.assertEqual(result.stale_rules, 1)
+
+    def test_earlier_single_substitution_learns_frozen_glyph(self):
+        # tnum runs before zero: the original shows zero.tf.slash for tnum + zero
+        font = with_features("feature tnum { sub zero by O; } tnum;"
+                             "feature zero { sub zero by zero.ss01; sub O by o; } zero;")
+        freeze_features(font, "zero")
+        tnum = font["GSUB"].table.LookupList.Lookup[0].SubTable[0]
+        self.assertEqual(tnum.mapping.get("zero.ss01"), "o")
+
+    def test_glyph_sequence_rules_get_a_copy(self):
+        # several exact-glyph rules make feaLib build format 1; all run before ss01
+        font = with_features("lookup LOWER { sub O by o; } LOWER;"
+                             "feature calt { sub O' lookup LOWER I; sub O' lookup LOWER x; sub H' lookup LOWER I n; } calt;"
+                             "feature ss01 { sub I by I.ss01; } ss01;")
+        chain = font["GSUB"].table.LookupList.Lookup[1].SubTable[0]
+        self.assertEqual(chain.Format, 1)
+        result = freeze_features(font, "ss01")
+        rule_sets = dict(zip(chain.Coverage.glyphs, chain.ChainSubRuleSet))
+        o_rules = [list(r.LookAhead) for r in rule_sets["O"].ChainSubRule]
+        self.assertEqual(o_rules[:2], [["I"], ["I.ss01"]])  # the copy right after the original keeps priority
+        self.assertIn(["I.ss01", "n"], [list(r.LookAhead) for r in rule_sets["H"].ChainSubRule])
+        self.assertEqual(result.stale_rules, 0)
 
     def test_context_rules_see_frozen_glyphs(self):
         # calt (before ss01) turns O into o when I follows; after freezing ss01 it must also fire before I.ss01
@@ -134,6 +179,15 @@ class FreezeRepairTest(unittest.TestCase):
         nested = font["GSUB"].table.LookupList.Lookup[0].SubTable[0]
         self.assertEqual(nested.mapping.get("I.ss01"), "H")
 
+    def test_one_glyph_entries_of_multiple_substitutions_freeze(self):
+        # one rule produces two glyphs, so the whole lookup is a multiple substitution (type 2)
+        font = with_features("feature ss04 { sub zero by zero.ss01; sub I by I.ss01; sub H by I O; } ss04;")
+        self.assertEqual(font["GSUB"].table.LookupList.Lookup[0].LookupType, 2)
+        result = freeze_features(font, "ss04")
+        cmap = font.getBestCmap()
+        self.assertEqual((cmap[ord("0")], cmap[ord("I")], cmap[ord("H")]), ("zero.ss01", "I.ss01", "H"))
+        self.assertEqual((result.remapped, result.partial), (2, ["ss04"]))
+
     def test_partial_features_are_reported(self):
         font = with_features("feature ss03 { sub zero by zero.ss01; sub I' zero by I.ss01; } ss03;")
         result = freeze_features(font, "ss03")
@@ -147,6 +201,15 @@ class DisableTest(unittest.TestCase):
         record = next(r for r in font["GSUB"].table.FeatureList.FeatureRecord if r.FeatureTag == "liga")
         self.assertEqual(record.Feature.LookupListIndex, [])
         self.assertIn("liga", list_features(font))  # the record stays, indices stay valid
+
+    def test_disable_reaches_gpos_and_feature_variations(self):
+        font = fx.open_font(fx.axis_swap_variable_ttf())
+        addOpenTypeFeaturesFromString(font, "feature kern { pos H O -50; } kern;", tables=["GPOS"])
+        disable_features(font, ["kern", "rvrn"])
+        kern = next(r for r in font["GPOS"].table.FeatureList.FeatureRecord if r.FeatureTag == "kern")
+        self.assertEqual(kern.Feature.LookupListIndex, [])
+        swap = font["GSUB"].table.FeatureVariations.FeatureVariationRecord[0].FeatureTableSubstitution
+        self.assertEqual(swap.SubstitutionRecord[0].Feature.LookupListIndex, [])
 
     def test_disable_unknown(self):
         with self.assertRaisesRegex(FontmintError, "no feature.*kern"):

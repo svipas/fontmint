@@ -64,7 +64,7 @@ OpenSans[wdth,wght].ttf
   axes:      wght 300–800 (default 400), wdth 75–100 (default 100)
   instances: Light, Regular, SemiBold, Bold, ExtraBold, Condensed Light, Condensed Regular, …
   features:  aalt ccmp dnom frac liga … ss01 ss02 ss03 ss04 subs sups tnum zero
-  spacing:   mark mkmk (can only be disabled)
+  positioning: mark mkmk
 ```
 
 ### Static fonts: freeze and rename only
@@ -83,6 +83,8 @@ Some features offer several alternative shapes for the same character (fonts lik
 ```bash
 fontmint Iosevka-Regular.ttf --features cv47=2 --name "Iosevka Mine"
 ```
+
+Some fonts build accented letters from a base letter and a separate accent; those letters keep their original shape, and fontmint warns about it.
 
 `--disable` turns features off completely, for example the ligatures in a coding font (JetBrains Mono keeps them in `calt`):
 
@@ -210,7 +212,7 @@ dist/InterClear/
 
 Static input is written straight into `dist/<FamilyName>/`, in its own format.
 
-Static fonts where every character has the same width are marked as monospaced, so apps that list only monospaced fonts show them.
+Static fonts built from a variable font are marked as monospaced when every character has the same width, so apps that list only monospaced fonts show them.
 
 Static fonts built with axis options are named after their axis values: `Condensed Bold Italic`, `W375` for non-standard weights, `Wdth80` for non-standard widths, `Oblique` for slanted fonts, and labels like `Opsz32` or `MONO1` for other axes that get several values in one run.
 
@@ -236,24 +238,13 @@ The font logic works entirely in memory - font bytes in, file bytes out - so you
 
 ```python
 from pathlib import Path
-from fontmint import Options, inspect, mint
+from fontmint import FontmintError, Options, inspect, mint
 
 data = Path("InterVariable.ttf").read_bytes()
 print(inspect(data).features)  # ['aalt', 'calt', …, 'ss02', …]
 
-files = mint(data, Options(features="ss02", name="Inter Clear", axes={"wght": "400,700"}))
-for rel, content in files.items():  # {"InterClear/otf/InterClear-Bold.otf": b"…", …}
-    Path("dist", rel).parent.mkdir(parents=True, exist_ok=True)
-    Path("dist", rel).write_bytes(content)
-```
-
-Options also accept Python values instead of strings:
-
-```python
-from fontmint import FontmintError, Options, mint
-
 options = Options(
-    features={"ss02": 1, "cv05": 1},  # the number picks an alternate; 1 is the first
+    features=["ss02", "cv05"],
     disable=["calt"],
     name="Inter Clear",
     axes={"wght": [400, 700]},  # a tuple, (300, 700), is a range
@@ -262,8 +253,14 @@ options = Options(
 try:
     files = mint(data, options)
 except FontmintError as e:
-    print(f"fontmint: {e}")
+    raise SystemExit(f"fontmint: {e}")
+
+for rel, content in files.items():  # {"InterClear/ttf-hinted/InterClear-Bold.ttf": b"…", …}
+    Path("dist", rel).parent.mkdir(parents=True, exist_ok=True)
+    Path("dist", rel).write_bytes(content)
 ```
+
+Options also take the same text as the command line, like `features="ss02,cv47=2"` or `axes={"wght": "300:700"}`.
 
 ## Limitations
 

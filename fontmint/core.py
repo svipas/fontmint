@@ -33,7 +33,6 @@ from .features import (
     FreezeResult,
     disable_features,
     freeze_features,
-    has_feature_variations,
     list_features,
     parse_features,
     parse_tags,
@@ -49,13 +48,16 @@ from .naming import (
     ps_name,
     rename_family,
     safe_path_part,
-    set_fixed_pitch,
     set_static_names,
     style_from_location,
     weight_name,
     width_class,
     width_name,
 )
+
+
+# Features many scripts need to show text correctly; turning them off gets a warning.
+TEXT_FEATURES = {"ccmp", "locl", "mark", "mkmk", "rlig", "init", "medi", "fina", "isol", "rclt", "abvm", "blwm"}
 
 
 @dataclass
@@ -119,8 +121,8 @@ class FontInfo:
     axes: list[tuple[str, float, float, float]]           # (tag, min, default, max)
     instances: list[tuple[str, dict[str, float]]]          # (style name, coordinates)
     features: list[str]                                    # substitution (GSUB) feature tags
-    positioning: list[str]                                 # positioning (GPOS) feature tags, e.g. kern
     italic: bool
+    positioning: list[str] = field(default_factory=list)  # positioning (GPOS) feature tags, e.g. kern
 
 
 @dataclass
@@ -140,7 +142,6 @@ class Job:
     hint: bool = True
     remove_overlaps: bool = True
     subroutinize: bool = True
-    freeze: dict[str, int] | None = None       # features to freeze after instancing (see prepare)
 
     @property
     def folder(self) -> str:
@@ -164,7 +165,7 @@ class Prepared:
 
 
 def inspect(font_bytes: bytes) -> FontInfo:
-    """Family, axes, named instances and GSUB features of a font."""
+    """Family, axes, named instances and features of a font."""
     font = load(font_bytes)
     variable = is_variable(font)
     axes = [(a.axisTag, a.minValue, a.defaultValue, a.maxValue) for a in font["fvar"].axes] if variable else []
@@ -172,8 +173,8 @@ def inspect(font_bytes: bytes) -> FontInfo:
     if variable:
         for inst in font["fvar"].instances:
             instances.append((get_name(font, inst.subfamilyNameID) or "?", dict(inst.coordinates)))
-    return FontInfo(family_name(font), variable, axes, instances, list_features(font),
-                    list_features(font, "GPOS"), is_italic(font))
+    return FontInfo(family_name(font), variable, axes, instances, list_features(font), is_italic(font),
+                    list_features(font, "GPOS"))
 
 
 
@@ -191,6 +192,9 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
 
     if disable:
         disable_features(font, disable)
+        if needed := [t for t in disable if t in TEXT_FEATURES]:
+            warnings.append(f"turning off {', '.join(needed)} can break text: these features place accents or "
+                            "join and shape letters in many scripts")
     if options.name:
         if options.name in (old_family, old_family.removesuffix(" Variable")):
             warnings.append("--name is the original family name; the build will clash with the original font")
@@ -200,37 +204,38 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
         warnings.append("no --name given; the output keeps the original family name and will clash with the "
                         "original font (add --name to avoid this)")
 
-    # Some variable fonts swap glyphs depending on axis values (feature variations,
-    # e.g. Recursive's italic letters). Their static fonts are frozen after
-    # instancing, when those swaps are fixed, so the swaps aren't lost.
-    unfrozen = to_bytes(font) if variable and spec and has_feature_variations(font) else None
     frozen = 0
     if spec:
         result = freeze_features(font, spec)
         frozen = result.remapped
         warnings += _freeze_warnings(options.features, result)
-        if unfrozen:
-            warnings.append("this font swaps some glyphs depending on its axes (e.g. italic forms); in the variable "
-                            "font the frozen glyphs may replace those swaps. Static fonts keep them")
 
     if variable:
-        return _prepare_variable_input(font, options, old_family, frozen, warnings, spec, unfrozen)
+        return _prepare_variable_input(font, options, old_family, frozen, warnings)
     return _prepare_static_input(font, options, old_family, frozen, warnings)
 
 
 def _freeze_warnings(features: str, result: FreezeResult) -> list[str]:
     warnings = []
-    if result.remapped == 0:
-        warnings.append(f"'{features}' changed no characters: only features that swap one glyph for another "
-                        "(ssXX, cvXX, zero, …) can be frozen, not ligatures or contextual features")
+    if result.remapped == 0 and result.outputs_changed == 0:
+        warnings.append(f"'{features}' changed nothing: it only changes ligatures, or glyphs that depend on "
+                        "neighboring characters, which can't be frozen (they can be turned off with --disable)")
     elif result.partial:
         warnings.append(f"{', '.join(result.partial)}: only the one-to-one swaps were frozen; the feature's other "
                         "rules (e.g. for accented letters, ligatures, or swaps that depend on neighboring characters) "
                         "can't be frozen, so some characters keep their original shape")
     if result.stale_rules:
-        warnings.append(f"{result.stale_rules} context-dependent rule(s) in the font expect the original glyphs, so "
-                        "they won't apply to the frozen ones (e.g. punctuation that adapts to nearby characters)")
+        warnings.append(f"{result.stale_rules} group(s) of the font's rules can't be updated for the frozen glyphs, "
+                        "so some ligatures and forms that depend on neighboring characters won't appear")
     return warnings
+
+
+def _long_name_warning(family_names: list[str]) -> list[str]:
+    longest = max(family_names, key=len, default="")
+    if len(longest) <= WINDOWS_FAMILY_LIMIT:
+        return []
+    return [f"family names like '{longest}' are longer than {WINDOWS_FAMILY_LIMIT} characters, which some "
+            "Windows apps cut off; a shorter --name avoids this"]
 
 
 def _prepare_static_input(font, options, old_family, frozen, warnings) -> Prepared:
@@ -244,11 +249,13 @@ def _prepare_static_input(font, options, old_family, frozen, warnings) -> Prepar
     family = options.name or old_family
     folder = safe_path_part(family)
     stem = safe_path_part(get_name(font, 6) or folder)
+    if options.name:
+        warnings += _long_name_warning([get_name(font, 1) or family])
     path = f"{folder}/{stem}.{extension(font)}"
     return Prepared(family, frozen, warnings, {path: to_bytes(font, font.flavor)}, [])
 
 
-def _prepare_variable_input(font, options, old_family, frozen, warnings, spec, unfrozen) -> Prepared:
+def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prepared:
     family = options.name or old_family.removesuffix(" Variable")
     folder = safe_path_part(family)
     formats = set(options.formats) if options.formats is not None else set(FORMATS)
@@ -256,15 +263,13 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings, spec, u
     cff2 = "CFF2" in font
     job_args = dict(vf_bytes=to_bytes(font), family=family, formats=formats, hint=options.hint,
                     remove_overlaps=options.remove_overlaps, subroutinize=options.subroutinize)
-    static_args = job_args | {"vf_bytes": unfrozen, "freeze": spec} if unfrozen else job_args
-
     if options.axes:
-        files, jobs = {}, _axis_jobs(font, options.axes, folder, italic, job_args, static_args)
+        files, jobs = {}, _axis_jobs(font, options.axes, folder, italic, job_args)
     else:
         axes = ",".join(a.axisTag for a in font["fvar"].axes)
         stem = f"{folder}{'-Italic' if italic else ''}[{axes}]"
         files = _variable_files(font, f"{folder}/variable/{stem}", formats, cff2)
-        jobs = _named_instance_jobs(font, italic, static_args)
+        jobs = _named_instance_jobs(font, italic, job_args)
 
     own = "otf" if cff2 else "ttf"
     if not formats & {own, "woff2"}:
@@ -280,10 +285,7 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings, spec, u
             raise FontmintError("--style-name only works when exactly one static font is built "
                                 f"(this would build {len(statics)}; give each axis option a single value)")
         _restyle(statics[0], apply_style_name(options.style_name, italic))
-    long_names = sorted({legacy_names(j.family, j.style)[0] for j in statics}, key=len, reverse=True)
-    if long_names and len(long_names[0]) > WINDOWS_FAMILY_LIMIT:
-        warnings.append(f"family names like '{long_names[0]}' are longer than {WINDOWS_FAMILY_LIMIT} characters, "
-                        "which some Windows apps cut off; a shorter --name avoids this")
+    warnings += _long_name_warning([legacy_names(j.family, j.style)[0] for j in statics])
     if statics and cff2:
         raise FontmintError("static fonts from CFF2 (OTF) variable fonts aren't supported yet; "
                             "use the font's TrueType (.ttf) version if there is one")
@@ -307,7 +309,7 @@ def _named_instance_jobs(font: TTFont, italic: bool, job_args: dict) -> list[Job
     return jobs
 
 
-def _axis_jobs(font: TTFont, specs: dict, folder: str, italic: bool, job_args: dict, static_args: dict) -> list[Job]:
+def _axis_jobs(font: TTFont, specs: dict, folder: str, italic: bool, job_args: dict) -> list[Job]:
     """Jobs for --weight/--width/…: pinned combinations → static, ranges → trimmed variable."""
     fvar_axes = [a.axisTag for a in font["fvar"].axes]
     defaults = {a.axisTag: a.defaultValue for a in font["fvar"].axes}
@@ -316,7 +318,7 @@ def _axis_jobs(font: TTFont, specs: dict, folder: str, italic: bool, job_args: d
     for combo in plan.combos:
         if axes_mod.is_static(combo):
             loc = defaults | combo
-            jobs.append(_static_job(loc, style_from_location(loc, plan.labeled, italic), static_args))
+            jobs.append(_static_job(loc, style_from_location(loc, plan.labeled, italic), job_args))
         else:
             remaining = [t for t in fvar_axes if not (t in combo and not isinstance(combo[t], tuple))]
             limits = "-".join(_describe(t, v) for t, v in combo.items())
@@ -369,14 +371,8 @@ def build_job(job: Job) -> dict[str, bytes]:
     if job.kind == "variable":
         return _variable_files(font, f"{job.folder}/variable/{job.stem}", job.formats, "CFF2" in font)
 
-    if job.freeze:
-        # Text engines apply rvrn (the glyph swaps chosen by axis values) before
-        # any other feature, so freeze it first.
-        if "rvrn" in list_features(font):
-            freeze_features(font, {"rvrn": 1})
-        freeze_features(font, job.freeze)
     stem = set_static_names(font, job.family, job.style, job.weight_class, job.width_class)
-    set_fixed_pitch(font)
+    mark_monospaced(font)
     # A hinted source keeps the designer's hints (adjusted to the instance by the
     # instancer); ttfautohint is only used for sources without hinting.
     wants_hinted = job.hint and bool({"ttf", "woff2"} & job.formats)
@@ -398,6 +394,21 @@ def build_job(job: Job) -> dict[str, bytes]:
         if hinted:
             files[f"{job.folder}/woff2-hinted/{stem}.woff2"] = to_bytes(hinted, "woff2")
     return files
+
+
+def mark_monospaced(font: TTFont) -> None:
+    """Mark a static font as monospaced when every character has the same width -
+    zero-width marks and double-width glyphs (e.g. an ffi ligature) aside - as apps
+    that only list monospaced fonts check this. A designer's own setting is never
+    cleared."""
+    widths = [font["hmtx"][g][0] for g in set(font.getBestCmap().values())]
+    common = max(set(widths), key=widths.count, default=0)
+    if common == 0 or not set(widths) <= {0, common, 2 * common}:
+        return
+    font["post"].isFixedPitch = 1
+    panose = font["OS/2"].panose
+    if panose.bFamilyType == 2:  # Latin text: bProportion 9 means monospaced
+        panose.bProportion = 9
 
 
 def output_paths(prepared: Prepared) -> list[str]:

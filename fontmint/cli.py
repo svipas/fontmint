@@ -123,7 +123,7 @@ def list_features(path: Path) -> None:
         print(f"  instances: {', '.join(name for name, _ in info.instances) or '-'}")
     print(f"  features:  {' '.join(info.features) or '-'}")
     if info.positioning:
-        print(f"  spacing:   {' '.join(info.positioning)} (can only be disabled)")
+        print(f"  positioning: {' '.join(info.positioning)}")
 
 
 def package_version() -> str:
@@ -225,6 +225,8 @@ def run(args: argparse.Namespace) -> None:
                 "replaces them")
         if options.features:
             log(f"  froze {options.features}: {prepared.frozen} characters remapped")
+        if options.disable:
+            log(f"  disabled {options.disable}")
         for w in prepared.warnings:
             log(f"  warning: {w}")
 

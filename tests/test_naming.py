@@ -121,6 +121,18 @@ class RenameFamilyTest(unittest.TestCase):
         self.assertEqual(font["name"].getDebugName(3), "1.000;TEST;MintSans-Regular")
         self.assertEqual(warnings, [])
 
+    def test_postscript_name_without_hyphen_is_left_alone(self):
+        font = fx.open_font(fx.static_ttf())
+        font["name"].setName("TestSANSBold", 6, 3, 1, 0x409)
+        warnings = rename_family(font, "Test Sans", "Mint Sans")
+        self.assertEqual(font["name"].getDebugName(6), "TestSANSBold")  # no suffix to keep: don't guess
+        self.assertTrue(any("PostScript name 'TestSANSBold'" in w for w in warnings))
+
+    def test_no_leftover_warning_when_new_name_contains_old(self):
+        font = fx.open_font(fx.static_ttf())
+        self.assertEqual(rename_family(font, "Test Sans", "Test Sans Clear"), [])
+        self.assertEqual(font["name"].getDebugName(6), "TestSansClear-Regular")
+
     def test_localized_family_names_are_dropped(self):
         font = fx.open_font(fx.static_ttf())
         font["name"].setName("テスト サンズ", 1, 3, 1, 0x411)
@@ -137,7 +149,7 @@ class RenameFamilyTest(unittest.TestCase):
         font = fx.open_font(fx.static_ttf())
         font["name"].setName("TestSans Regular", 4, 3, 1, 0x409)  # PostScript-style family inside a display name
         warnings = rename_family(font, "Test Sans", "Mint")
-        self.assertTrue(warnings and "still mention" in warnings[0])
+        self.assertTrue(warnings and "still contain" in warnings[0])
 
     def test_cff_names_follow(self):
         font = fx.open_font(fx.static_otf())

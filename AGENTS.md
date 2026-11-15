@@ -112,10 +112,11 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 ## Gotchas
 
 - In argparse help strings, a literal `%` must be written `%%`, or `--help` crashes.
-- fontTools re-serializes tables it loaded: `GSUB` bytes change after freezing although its content is identical. Compare tables with `toXML` when bytes differ.
+- fontTools re-serializes tables it loaded: `GSUB` bytes can change after freezing even where its content didn't. Compare tables with `toXML` when bytes differ.
 - `Qu2CuPen(all_cubic=True)` raises `NotImplementedError` on contours without on-curve points (common after overlap removal). `ttf_to_otf` falls back to exact conversion for that glyph.
-- Freezing only changes `cmap`, so other GSUB rules still expect the original glyphs. `features.py` repairs what it safely can: ligatures (adds the same ligature for the frozen glyphs), and context rules in formats 2/3 that ran before the frozen feature (adds the frozen glyph next to the original, and teaches their nested single substitutions the frozen glyph). Whatever it can't repair is counted in `FreezeResult.stale_rules` and becomes a warning. Verify freezing changes against HarfBuzz: the frozen font with default settings must shape like the original with the feature on.
-- Text engines run each lookup once, in lookup-list order, and `rvrn` before everything else. The freezer follows the same order; for fonts with feature variations, static fonts are frozen after instancing with `rvrn` first.
+- Freezing changes `cmap`, so the font's other rules have to be updated, and only the ones that ran **before** the frozen feature (`rvrn` counts as first; nested lookups run at their caller's position). Updating a rule that ran after it creates behavior the original never had - e.g. an `fi` ligature in Recursive's monospaced italic. See `features._repair` and [docs/architecture.md](docs/architecture.md#under-the-hood).
+- A frozen glyph that already has its own character (`²` for `sups`) must not be taught other rules; Private Use codes don't count, as fonts like Inter give every alternate one.
+- Verify freezing changes against HarfBuzz: the frozen font with default settings must shape like the original with the feature on, also with other features on (e.g. `tnum`) and, for variable fonts, at several axis locations.
 - One-word families ("Inter") make display and PostScript names look identical. Renaming decides by name ID, not by spaces alone.
 - Quote file names with brackets (`'OpenSans[wdth,wght].ttf'`) in examples - zsh treats brackets as patterns. Don't quote real globs (`InterVariable*.ttf`), or the shell won't expand them.
 - ttfautohint fails on fonts without Latin reference glyphs (icon fonts). `convert.autohint` turns that into a `FontmintError` pointing at `--no-hint`.

@@ -71,39 +71,44 @@ def rename_family(font: TTFont, old: str, new: str) -> list[str]:
         # PostScript-style names get the space-less family ("Inter-Medium" →
         # "FooNew-Medium"); display names get the real one ("Inter" → "Foo New").
         # Unique IDs (3) and instance names (≥ 256) can be either kind.
-        if rec.nameID in POSTSCRIPT_NAME_IDS or ((rec.nameID == 3 or rec.nameID >= 256) and " " not in s):
-            s2 = s.replace(old_ps, new_ps)
-        else:
-            s2 = s.replace(old, new)
+        s2 = s.replace(old_ps, new_ps) if _postscript_style(rec.nameID, s) else s.replace(old, new)
         if s2 != s:
             rec.string = s2
 
     # A PostScript name that doesn't contain the family ("FooSANS-Regular" for
-    # "Foo Sans") wasn't touched above; give it the new family plus the old suffix.
-    if old_ps_name and get_name(font, 6) == old_ps_name:
-        old_ps = old_ps_name.partition("-")[0]
+    # "Foo Sans") wasn't touched above; give it the new family in front of its
+    # old style suffix. Without a "-" there's no suffix to keep, so leave it.
+    ps_prefix = old_ps
+    if old_ps_name and get_name(font, 6) == old_ps_name and "-" in old_ps_name:
+        ps_prefix = old_ps_name.partition("-")[0]
         for rec in name.names:
-            value = rec.toUnicode()
-            if (rec.nameID in POSTSCRIPT_NAME_IDS or rec.nameID == 3 or rec.nameID >= 256) and " " not in value:
-                rec.string = value.replace(old_ps, new_ps)
-        if "CFF " in font:
-            cff = font["CFF "].cff
-            cff.fontNames = [n.replace(old_ps, new_ps) for n in cff.fontNames]
+            if _postscript_style(rec.nameID, value := rec.toUnicode()):
+                rec.string = value.replace(ps_prefix, new_ps)
     if "CFF " in font:
         cff = font["CFF "].cff
         top = cff.topDictIndex[0]
-        cff.fontNames = [n.replace(old_ps, new_ps) for n in cff.fontNames]
+        cff.fontNames = [n.replace(ps_prefix, new_ps) for n in cff.fontNames]
         for key in ("FullName", "FamilyName"):
             if value := getattr(top, key, None):
                 setattr(top, key, value.replace(old, new))
 
-    if old in new or old_ps in new_ps:
-        return []
+    warnings = []
+    if old_ps_name and get_name(font, 6) == old_ps_name and old_ps_name.replace(old_ps, new_ps) == old_ps_name:
+        warnings.append(f"the PostScript name '{old_ps_name}' doesn't contain the family name, so it wasn't renamed; "
+                        "the build may clash with the original font")
+    if old in new or ps_prefix in new_ps:
+        return warnings
     leftovers = sorted({r.nameID for r in name.names if r.nameID in FAMILY_NAME_IDS
-                        and (old in r.toUnicode() or old_ps in r.toUnicode())})
+                        and (old in r.toUnicode() or ps_prefix in r.toUnicode())})
     if leftovers:
-        return [f"name ID(s) {', '.join(map(str, leftovers))} still mention '{old}'; check the result"]
-    return []
+        ids = ", ".join(map(str, leftovers))
+        warnings.append(f"some of the font's internal names (name ID {ids}) still contain '{old}'; "
+                        "check the result with --list-features or a font viewer")
+    return warnings
+
+
+def _postscript_style(name_id: int, value: str) -> bool:
+    return name_id in POSTSCRIPT_NAME_IDS or ((name_id == 3 or name_id >= 256) and " " not in value)
 
 
 def _is_english(rec) -> bool:
@@ -204,22 +209,6 @@ def legacy_names(family: str, style: str) -> tuple[str, str]:
     rest = " ".join(w for w in words if w not in LINKED_WORDS)
     linked = [w for w, on in (("Bold", "Bold" in words), ("Italic", "Italic" in words or "Oblique" in words)) if on]
     return (f"{family} {rest}" if rest else family), (" ".join(linked) or "Regular")
-
-
-def set_fixed_pitch(font: TTFont) -> None:
-    """Mark a static font as monospaced when every character has the same width -
-    zero-width marks and double-width glyphs (e.g. an ffi ligature) aside - as apps
-    that only list monospace fonts check this."""
-    widths = [font["hmtx"][g][0] for g in set(font.getBestCmap().values())]
-    common = max(set(widths), key=widths.count, default=0)
-    mono = common > 0 and set(widths) <= {0, common, 2 * common}
-    font["post"].isFixedPitch = int(mono)
-    panose = font["OS/2"].panose
-    if panose.bFamilyType == 2:  # Latin text: bProportion 9 means monospaced
-        if mono:
-            panose.bProportion = 9
-        elif panose.bProportion == 9:
-            panose.bProportion = 0
 
 
 def _set(name_table, value: str, name_id: int) -> None:
