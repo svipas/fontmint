@@ -7,6 +7,9 @@ Examples:
     # variable font + every named instance, in every format
     fontmint InterVariable*.ttf --features ss02 --name "Inter Clear"
 
+    # only the variable font
+    fontmint InterVariable*.ttf --features ss02 --name "Inter Clear" --no-static
+
     # static weights only, TTF + WOFF2
     fontmint InterVariable*.ttf --features ss02 --name "Inter Clear" \\
         --weight 400,500,600,700 --formats ttf,woff2
@@ -201,6 +204,8 @@ def build_parser() -> argparse.ArgumentParser:
     o.add_argument("--formats", default=None, metavar="LIST",
                    help=f"formats to build from variable fonts, any of {','.join(FORMATS)} (default: all); "
                         "ttf and woff2 give hinted and unhinted static fonts. Static input keeps its format")
+    o.add_argument("--no-static", action="store_true",
+                   help="build only the variable font from variable input, no static fonts")
     o.add_argument("--no-hint", action="store_true",
                    help="don't build hinted static fonts (needed for fonts without Latin letters, e.g. icon fonts)")
     o.add_argument("--output", default="dist", metavar="DIR", help="output directory (default: ./dist)")
@@ -226,6 +231,7 @@ def run(args: argparse.Namespace) -> None:
         axes=collect_axes(args),
         style_name=args.style_name,
         formats=args.formats,
+        static=not args.no_static,
         hint=not args.no_hint,
     )
     out = Path(args.output)

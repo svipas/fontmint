@@ -94,6 +94,8 @@ class Options:
     style_name:  style name when exactly one static font is built (375 → "Regular").
     formats:     subset of FORMATS for variable input, "ttf,woff2" or a set (None = all).
                  ttf/woff2 give hinted + unhinted statics. Ignored for static input.
+    static:      build static fonts from variable input (False = variable fonts only).
+                 Ignored for static input.
     hint / remove_overlaps / subroutinize:
                  native steps for statics built from variable fonts; disable where
                  ttfautohint, skia-pathops or cffsubr can't run.
@@ -109,6 +111,7 @@ class Options:
     axes: dict[str, object] = field(default_factory=dict)
     style_name: str = ""
     formats: str | set[str] | None = None
+    static: bool = True
     hint: bool = True
     remove_overlaps: bool = True
     subroutinize: bool = True
@@ -310,6 +313,8 @@ def _prepare_static_input(font, options, old_family, frozen, warnings) -> Prepar
         raise FontmintError("--style-name only applies to static fonts built from a variable font")
     if options.formats is not None:
         warnings.append("formats are ignored for static fonts; the output keeps the input format")
+    if not options.static:
+        warnings.append("--no-static only applies to variable fonts; the static font is written as usual")
     family = options.name or old_family
     folder = safe_path_part(family)
     stem = safe_path_part(get_name(font, 6) or folder)
@@ -329,10 +334,15 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prep
     vf_bytes = to_bytes(font)
     job_args = dict(vf_bytes=vf_bytes, family=family, letter_spacing=options.letter_spacing, formats=formats,
                     hint=options.hint, remove_overlaps=options.remove_overlaps, subroutinize=options.subroutinize)
+    if options.style_name and not options.static:
+        raise FontmintError("--style-name names a static font, but --no-static builds none")
     if options.axes:
         files, jobs = {}, _axis_jobs(font, options.axes, folder, italic, job_args)
+        if not options.static and any(j.kind == "static" for j in jobs):
+            raise FontmintError("single axis values (and 'all') make static fonts, but --no-static builds none; "
+                                "use ranges like --weight 300:700")
     else:
-        jobs = _named_instance_jobs(font, italic, job_args)
+        jobs = _named_instance_jobs(font, italic, job_args) if options.static else []
         if cff2 and jobs:
             jobs = []
             warnings.append("only the variable font is built: static fonts from CFF2 (OTF) variable fonts aren't "
@@ -348,6 +358,8 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prep
         hint = f"variable fonts are written as {own}/woff2 - add {own} or woff2 to --formats"
         if any(j.kind == "variable" for j in jobs):
             raise FontmintError(f"ranges make variable fonts, but {hint}")
+        if not options.static:
+            raise FontmintError(f"--no-static builds only variable fonts, but {hint}")
         if not options.axes:
             warnings.append(f"the variable font is skipped: {hint}")
 

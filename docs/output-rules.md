@@ -12,6 +12,8 @@ Exactly what fontmint builds for a given input and options. Paths are relative t
 | variable | single values only                     | static fonts for every combination - no variable font                                                                     |
 | variable | ranges (with or without single values) | one custom-range variable font per combination that contains a range, plus a static font per combination of single values |
 
+`--no-static` builds only variable fonts: the default mode drops the named instances, and single axis values (or `--style-name`) are an error. It's ignored with a warning for static input.
+
 Two inputs that would write the same path (same font twice, or two families with one `--name`) are an error. An existing family folder in `--output` gives a warning: same-named files are overwritten, others kept.
 
 ## Formats
@@ -24,7 +26,7 @@ Two inputs that would write the same path (same font twice, or two families with
 | `otf`   | - (`variable/<stem>.otf` for CFF2) | `otf/` (CFF, overlaps removed, subroutinized, unhinted) |
 | `woff2` | `variable/<stem>.woff2`            | `woff2-unhinted/` + `woff2-hinted/`                     |
 
-Without `ttf` or `woff2`, the default mode (no axis options) skips the variable font with a warning, and ranges are an error.
+Without `ttf` or `woff2`, the default mode (no axis options) skips the variable font with a warning; ranges and `--no-static` are an error.
 
 A variable font with CFF2 outlines is written as `.otf` (format `otf`) and WOFF2. Static fonts can't be built from it yet: the default mode builds only the variable font and warns, and single axis values are an error.
 

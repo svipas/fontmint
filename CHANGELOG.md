@@ -10,5 +10,6 @@ Initial release.
 - Line height and letter spacing (`--line-height`, `--letter-spacing`).
 - Smaller fonts with only the characters you need (`--subset`).
 - Variable fonts: static fonts at any axis value, custom-range variable fonts, in TTF (hinted and unhinted), OTF and WOFF2.
+- Only the variable font, without static fonts (`--no-static`).
 - Static fonts pass through in their own format.
 - `--info` shows a font's axes, named instances, features, languages and line height.

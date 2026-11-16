@@ -56,6 +56,12 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertEqual(self.written(), ["MintSans/otf/MintSans-Condensed.otf"])
 
+    def test_no_static(self):
+        code, _, err = self.run_cli(self.tmp / "TestSans[wght,wdth].ttf", "--name", "Mint Sans", "--no-static",
+                                    "--formats", "woff2", "--output", self.out)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.written(), ["MintSans/variable/MintSans[wght,wdth].woff2"])
+
     def test_bad_second_font_writes_nothing(self):
         """All inputs are checked before anything is written."""
         (self.tmp / "broken.ttf").write_bytes(b"not a font")

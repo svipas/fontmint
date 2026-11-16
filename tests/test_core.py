@@ -90,6 +90,11 @@ class StaticInputTest(unittest.TestCase):
         self.assertEqual(list(p.files), ["MintSans/MintSans-Regular.ttf"])
         self.assertTrue(any("formats are ignored" in w for w in p.warnings))
 
+    def test_no_static_ignored_with_warning(self):
+        p = prepare(fx.static_ttf(), Options(name="Mint Sans", static=False))
+        self.assertEqual(list(p.files), ["MintSans/MintSans-Regular.ttf"])
+        self.assertTrue(any("--no-static only applies to variable fonts" in w for w in p.warnings))
+
     def test_freeze_without_name_warns(self):
         p = prepare(fx.static_ttf(), Options(features="ss01"))
         self.assertTrue(any("no --name given" in w for w in p.warnings))
@@ -432,6 +437,20 @@ class AxisOptionsTest(unittest.TestCase):
         p = prepare(fx.variable_ttf(), Options(name="Mint Sans", formats={"otf"}))
         self.assertEqual(p.files, {})
         self.assertTrue(any("variable font is skipped" in w for w in p.warnings))
+
+    def test_no_static_builds_only_variable_fonts(self):
+        self.assertEqual(sorted(self.build(static=False, formats={"ttf", "woff2"})),
+                         ["MintSans/variable/MintSans[wght,wdth].ttf", "MintSans/variable/MintSans[wght,wdth].woff2"])
+        self.assertEqual(list(self.build(static=False, axes={"wght": "300:700"})),
+                         ["MintSans/variable/MintSans-wght300-700[wght,wdth].ttf"])
+
+    def test_no_static_rejects_what_needs_static_fonts(self):
+        with self.assertRaisesRegex(FontmintError, "--no-static"):
+            self.build(static=False, axes={"wght": "400,300:700"})
+        with self.assertRaisesRegex(FontmintError, "--no-static"):
+            self.build(static=False, style_name="Regular")
+        with self.assertRaisesRegex(FontmintError, "--no-static builds only variable fonts.*add ttf or woff2"):
+            self.build(static=False, formats={"otf"})
 
     def test_equal_range_is_a_value(self):
         files = self.build(axes={"wght": "400:400"})

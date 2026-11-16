@@ -213,6 +213,9 @@ All formats are built by default. Use `--formats` to choose some of them (variab
 ```bash
 # web fonts only: variable WOFF2 + static WOFF2 (hinted and unhinted)
 fontmint InterVariable*.ttf --features ss02 --name "Inter Clear" --formats woff2
+
+# only the variable WOFF2, no static fonts
+fontmint InterVariable*.ttf --features ss02 --name "Inter Clear" --formats woff2 --no-static
 ```
 
 Fonts without Latin letters, such as icon fonts, can't be hinted automatically; add `--no-hint` to build them without the hinted versions.
@@ -237,6 +240,7 @@ Fonts without Latin letters, such as icon fonts, can't be hinted automatically; 
 | `--axis MONO=1`           | Any other axis by its tag. Repeatable.                                       |
 | `--style-name Regular`    | Style name when exactly one static font is built.                            |
 | `--formats ttf,otf,woff2` | Output formats for variable input. Default: all.                             |
+| `--no-static`             | Build only the variable font, no static fonts.                               |
 | `--no-hint`               | Don't build the hinted static fonts.                                         |
 | `--output dist`           | Output directory. Default: `./dist`.                                         |
 | `--jobs 8`                | Number of fonts to build in parallel. Default: number of CPUs.               |
