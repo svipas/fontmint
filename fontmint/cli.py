@@ -163,7 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="font file(s): variable or static TTF/OTF/WOFF2")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     p.add_argument("--info", action="store_true",
-                   help="show the font's axes, named instances, features and languages")
+                   help="show the font's axes, named instances, features, languages and line height")
     p.add_argument("--features", default="", metavar="TAGS",
                    help="features to make the default (freeze), e.g. ss02,zero; for a feature with several "
                         "alternates, add a number: cv47=2 picks the second")

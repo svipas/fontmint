@@ -7,6 +7,17 @@
   Freeze OpenType features · rename the family · export variable &amp; static TTF, OTF and WOFF2
 </p>
 
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#installation">Installation</a> ·
+  <a href="#usage">Usage</a> ·
+  <a href="#options">Options</a> ·
+  <a href="#output">Output</a> ·
+  <a href="#which-files-should-i-use">Which files?</a> ·
+  <a href="#use-as-a-library">Library</a> ·
+  <a href="#limitations">Limitations</a>
+</p>
+
 ---
 
 Many fonts contain alternative letter shapes, such as a slashed zero, that only show up in apps where you can turn on OpenType features. fontmint makes those alternatives the default (it **freezes** the features) and gives the font a **new family name**, so your version installs next to the original. For **variable fonts** - one file that covers a range of styles along **axes** such as weight and width - it also exports **variable and static fonts at any axis value** (weight 375, Condensed, …) as TTF (hinted and unhinted), OTF and WOFF2. All in one command.
@@ -35,7 +46,8 @@ This command builds 94 files: the Inter font with its `ss02` set (slashed zero, 
 
 ## Installation
 
-Requires Python 3.10 or newer. Check with `python3 --version`; the Python included with macOS is 3.9, so install a newer one with Homebrew or from python.org.
+> [!IMPORTANT]
+> Requires Python 3.10 or newer. Check with `python3 --version`; the Python included with macOS is 3.9, so install a newer one with Homebrew or from python.org.
 
 ```bash
 git clone https://github.com/svipas/fontmint.git
@@ -52,7 +64,8 @@ mkdir -p ~/.local/bin && ln -s "$PWD/.venv/bin/fontmint" ~/.local/bin/fontmint
 
 ## Usage
 
-Variable font files often have brackets in their names, like `OpenSans[wdth,wght].ttf`. Put these names in quotes, as in the examples below.
+> [!IMPORTANT]
+> Variable font files often have brackets in their names, like `OpenSans[wdth,wght].ttf`. Put these names in quotes, as in the examples below.
 
 ### Inspect a font
 
@@ -96,7 +109,8 @@ Some features offer several alternative shapes for the same character (fonts lik
 fontmint Iosevka-Regular.ttf --features cv47=2 --name "Iosevka Mine"
 ```
 
-Some fonts build accented letters from a base letter and a separate accent; those letters keep their original shape, and fontmint warns about it.
+> [!NOTE]
+> Some fonts build accented letters from a base letter and a separate accent; those letters keep their original shape, and fontmint warns about it.
 
 `--disable` turns features off completely, for example the ligatures in a coding font (JetBrains Mono keeps them in `calt`):
 
@@ -112,7 +126,8 @@ Many fonts draw some letters differently for one language, but apps only show th
 fontmint 'OpenSans[wdth,wght].ttf' --features locl --language ROM --name "Open Sans RO"
 ```
 
-`--info` shows which languages a font has forms for. The tags are OpenType language tags, such as `ROM` for Romanian or `SRB` for Serbian.
+> [!TIP]
+> `--info` shows which languages a font has forms for. The tags are OpenType language tags, such as `ROM` for Romanian or `SRB` for Serbian.
 
 ### Line height and letter spacing
 
@@ -122,7 +137,14 @@ Some apps have no setting for the space between lines or letters. Build it into 
 fontmint JetBrainsMono*.ttf --name "JetBrains Mono Airy" --line-height 1.5 --letter-spacing 0.02
 ```
 
-`--info` shows a font's current line height (JetBrains Mono: 1.32). The extra line space is split equally above and below the text, and accents and kerning stay where they belong. In a monospaced font, double-width glyphs get twice the letter spacing, so they still fill two cells. Line height can be 0.5 to 3, letter spacing -0.5 to 1.
+`--info` shows a font's current line height (JetBrains Mono: 1.32). Line height can be 0.5 to 3, letter spacing -0.5 to 1.
+
+<details>
+<summary>How the spacing is applied</summary>
+
+The extra line space is split equally above and below the text, and accents and kerning stay where they belong. In a monospaced font, double-width glyphs get twice the letter spacing, so they still fill two cells.
+
+</details>
 
 ### Smaller web fonts
 
@@ -132,7 +154,12 @@ A font for a website usually needs far fewer characters than the full font has. 
 fontmint InterVariable.ttf --name "Inter Web" --subset latin,latin-ext --formats woff2
 ```
 
-The presets are `latin`, `latin-ext`, `cyrillic`, `cyrillic-ext`, `greek` and `vietnamese` (the character sets Google Fonts uses), and you can add ranges like `U+2190-21FF`. Only `latin` has digits, punctuation and the space, so add it to the others: `--subset latin,cyrillic`. Glyphs the remaining characters need stay too, such as their alternates and ligatures, and so do their features, the font's names and its hinting. For the Inter variable font:
+The presets are `latin`, `latin-ext`, `cyrillic`, `cyrillic-ext`, `greek` and `vietnamese` (the character sets Google Fonts uses), and you can add ranges like `U+2190-21FF`.
+
+> [!IMPORTANT]
+> Only `latin` has digits, punctuation and the space, so add it to the others: `--subset latin,cyrillic`.
+
+Glyphs the remaining characters need stay too, such as their alternates and ligatures, and so do their features, the font's names and its hinting. Tables that can't be subset, such as bitmaps, are dropped with a warning. For the Inter variable font:
 
 | Subset            | Characters | WOFF2  | TTF    |
 | ----------------- | ---------- | ------ | ------ |
@@ -150,7 +177,10 @@ Without axis options, you get the variable font **plus** a static font for every
 fontmint InterVariable.ttf InterVariable-Italic.ttf --features ss02 --name "Inter Clear"
 ```
 
-If the family has a separate italic file, pass it too - each input file produces its own output. Hinting and OTF conversion apply only to the static fonts; the variable font keeps its original outlines and hinting, with only your changes applied.
+If the family has a separate italic file, pass it too - each input file produces its own output. Add `--no-static` to get only the variable font.
+
+> [!NOTE]
+> Hinting and OTF conversion apply only to the static fonts; the variable font keeps its original outlines and hinting, with only your changes applied.
 
 ### Variable fonts: pick axis values
 
@@ -218,35 +248,48 @@ fontmint InterVariable*.ttf --features ss02 --name "Inter Clear" --formats woff2
 fontmint InterVariable*.ttf --features ss02 --name "Inter Clear" --formats woff2 --no-static
 ```
 
-Fonts without Latin letters, such as icon fonts, can't be hinted automatically; add `--no-hint` to build them without the hinted versions.
+> [!TIP]
+> Fonts without Latin letters, such as icon fonts, can't be hinted automatically; add `--no-hint` to build them without the hinted versions.
 
 ## Options
 
-| Option                    | Description                                                                  |
-| ------------------------- | ---------------------------------------------------------------------------- |
-| `--info`                  | Show the font's axes, named instances, features and languages.               |
-| `--features ss02,zero`    | Features to freeze; `cv47=2` picks a feature's second alternate.             |
-| `--language ROM`          | Freeze the forms the font has for this language (with `--features locl`).    |
-| `--disable calt,liga`     | Features to turn off.                                                        |
-| `--line-height 1.5`       | Line spacing as a multiple of the font size, like CSS.                       |
-| `--letter-spacing 0.02`   | Extra space after each character, as a fraction of the font size, like CSS.  |
-| `--subset latin`          | Keep only these characters: a preset or ranges like `U+2190-21FF`.           |
-| `--name "Inter Clear"`    | New family name. Recommended, so your build doesn't clash with the original. |
-| `--weight 400,700`        | Weight axis (`wght`).                                                        |
-| `--width 75,100`          | Width axis (`wdth`), in % - 75 = Condensed, 125 = Expanded.                  |
-| `--slant -10`             | Slant axis (`slnt`), in degrees.                                             |
-| `--italic 0,1`            | Italic axis (`ital`).                                                        |
-| `--optical-size 32`       | Optical size axis (`opsz`).                                                  |
-| `--axis MONO=1`           | Any other axis by its tag. Repeatable.                                       |
-| `--style-name Regular`    | Style name when exactly one static font is built.                            |
-| `--formats ttf,otf,woff2` | Output formats for variable input. Default: all.                             |
-| `--no-static`             | Build only the variable font, no static fonts.                               |
-| `--no-hint`               | Don't build the hinted static fonts.                                         |
-| `--output dist`           | Output directory. Default: `./dist`.                                         |
-| `--jobs 8`                | Number of fonts to build in parallel. Default: number of CPUs.               |
-| `--version`               | Show the version.                                                            |
+**Features and names**
+
+| Option                  | Description                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `--info`                | Show the font's axes, named instances, features, languages and line height.  |
+| `--features ss02,zero`  | Features to freeze; `cv47=2` picks a feature's second alternate.             |
+| `--language ROM`        | Freeze the forms the font has for this language (with `--features locl`).    |
+| `--disable calt,liga`   | Features to turn off.                                                        |
+| `--line-height 1.5`     | Line spacing as a multiple of the font size, like CSS.                       |
+| `--letter-spacing 0.02` | Extra space after each character, as a fraction of the font size, like CSS.  |
+| `--subset latin`        | Keep only these characters: a preset or ranges like `U+2190-21FF`.           |
+| `--name "Inter Clear"`  | New family name. Recommended, so your build doesn't clash with the original. |
+
+**Axes (variable fonts)**
+
+| Option                 | Description                                                 |
+| ---------------------- | ----------------------------------------------------------- |
+| `--weight 400,700`     | Weight axis (`wght`).                                       |
+| `--width 75,100`       | Width axis (`wdth`), in % - 75 = Condensed, 125 = Expanded. |
+| `--slant -10`          | Slant axis (`slnt`), in degrees.                            |
+| `--italic 0,1`         | Italic axis (`ital`).                                       |
+| `--optical-size 32`    | Optical size axis (`opsz`).                                 |
+| `--axis MONO=1`        | Any other axis by its tag. Repeatable.                      |
+| `--style-name Regular` | Style name when exactly one static font is built.           |
 
 All axis options take single values, `MIN:MAX` ranges, comma-separated lists of both, or `all`.
+
+**Output**
+
+| Option                    | Description                                                    |
+| ------------------------- | -------------------------------------------------------------- |
+| `--formats ttf,otf,woff2` | Output formats for variable input. Default: all.               |
+| `--no-static`             | Build only the variable font, no static fonts.                 |
+| `--no-hint`               | Don't build the hinted static fonts.                           |
+| `--output dist`           | Output directory. Default: `./dist`.                           |
+| `--jobs 8`                | Number of fonts to build in parallel. Default: number of CPUs. |
+| `--version`               | Show the version.                                              |
 
 ## Output
 
@@ -272,15 +315,22 @@ Custom-range variable fonts (`--weight 300:700`) go to `variable/` too, named af
 
 Static input is written straight into `dist/<FamilyName>/`, in its own format.
 
-Static fonts built from a variable font are marked as monospaced when every character has the same width, so apps that list only monospaced fonts show them.
+<details>
+<summary>How static fonts are named and marked</summary>
 
 Static fonts built with axis options are named after their axis values: `Condensed Bold Italic`, `W375` for non-standard weights, `Wdth80` for non-standard widths, `Oblique` for slanted fonts, and labels like `Opsz32` or `MONO1` for other axes that get several values in one run.
 
-Nothing is written until every font has been built and every destination has been checked, so a failed run doesn't leave half a build behind. If you run fontmint again with the same output folder, files with the same name are overwritten and other files are kept; fontmint warns you when this happens.
+Static fonts built from a variable font are marked as monospaced when every character has the same width (apart from marks and double-width glyphs), so apps that list only monospaced fonts show them.
+
+</details>
+
+> [!NOTE]
+> Nothing is written until every font has been built and every destination has been checked, so a failed run doesn't leave half a build behind. If you run fontmint again with the same output folder, files with the same name are overwritten and other files are kept; fontmint warns you when this happens.
 
 ## Which files should I use?
 
-This is for builds from a variable font. A static font comes back as one file in its own format, so there's nothing to pick.
+> [!NOTE]
+> This is for builds from a variable font. A static font comes back as one file in its own format, so there's nothing to pick.
 
 | Use case                           | Files                                                                                    |
 | ---------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -290,9 +340,11 @@ This is for builds from a variable font. A static font comes back as one file in
 | Websites                           | `variable/*.woff2`, or a few files from `woff2-unhinted/` if you only need 1–2 weights   |
 | Apps or workflows that require CFF | `otf/` - e.g. some print and prepress tools and older Adobe apps                         |
 
-TTF works everywhere - on macOS, Windows, Linux, in browsers and design apps - so use it by default. OTF contains the same design with CFF outlines; use it only when an app or workflow requires it.
+> [!TIP]
+> TTF works everywhere - on macOS, Windows, Linux, in browsers and design apps - so use it by default. OTF contains the same design with CFF outlines; use it only when an app or workflow requires it.
 
-Don't install a variable and a static build with the same family name at the same time - apps may pick the wrong one.
+> [!WARNING]
+> Don't install a variable and a static build with the same family name at the same time - apps may pick the wrong one.
 
 ## Use as a library
 
