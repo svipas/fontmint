@@ -4,13 +4,13 @@ Exactly what fontmint builds for a given input and options. Paths are relative t
 
 ## By input and options
 
-| Input    | Axis options                           | Output                                                                                                               |
-| -------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| static   | -                                      | `<F>/<PostScriptName>.<same extension as input>` - nothing else                                                      |
-| static   | any                                    | error                                                                                                                |
-| variable | none                                   | variable font (`<F>/variable/…`) + one static font per **named instance**, in every format                           |
-| variable | single values only                     | static fonts for every combination - no variable font                                                                |
-| variable | ranges (with or without single values) | one trimmed variable font per combination that contains a range, plus a static font per combination of single values |
+| Input    | Axis options                           | Output                                                                                                                    |
+| -------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| static   | -                                      | `<F>/<PostScriptName>.<same extension as input>` - nothing else                                                           |
+| static   | any                                    | error                                                                                                                     |
+| variable | none                                   | variable font (`<F>/variable/…`) + one static font per **named instance**, in every format                                |
+| variable | single values only                     | static fonts for every combination - no variable font                                                                     |
+| variable | ranges (with or without single values) | one custom-range variable font per combination that contains a range, plus a static font per combination of single values |
 
 Two inputs that would write the same path (same font twice, or two families with one `--name`) are an error. An existing family folder in `--output` gives a warning: same-named files are overwritten, others kept.
 
@@ -37,9 +37,9 @@ A variable font with CFF2 outlines is written as `.otf` (format `otf`) and WOFF2
 
 ## File names
 
-- Static: `<F>-<Style without spaces>` - `InterClear-BoldItalic.ttf`, `OpenSansX-CondensedBold.otf`.
+- Static: `<F>-<Style without spaces>` - `InterClear-BoldItalic.ttf`, `OpenSansCustom-CondensedBold.otf`.
 - Variable, default mode: `<F>[-Italic][<axis tags in fvar order>]` - `InterClear[opsz,wght].ttf`.
-- Variable, trimmed: `<F>[-Italic]-<limits>[<remaining axes>]` - `InterClear-wght300-700[opsz,wght].ttf`, `OpenSansX-wght300-600-Condensed[wght].ttf`.
+- Variable, custom range: `<F>[-Italic]-<limits>[<remaining axes>]` - `InterClear-wght300-700[opsz,wght].ttf`, `OpenSansCustom-wght300-600-Condensed[wght].ttf`.
 - Static input: the font's (renamed) PostScript name, original extension.
 
 `--name` and `--style-name` may only use ASCII letters, digits, spaces and punctuation other than `[](){}<>/%\:*?"|`, so names are valid in PostScript and as file names on every OS. Repeated spaces become one. Without `--name`, folder and file names come from names inside the font, which can't be trusted: unsafe characters become `_`, so output never leaves `--output`. Axis tags in file names are cleaned the same way. A resulting PostScript name (ID 6, or a static file stem) longer than 63 characters is an error.

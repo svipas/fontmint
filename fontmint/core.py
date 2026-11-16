@@ -3,7 +3,7 @@
 Nothing here touches the filesystem, parses arguments, prints or exits, so it can
 be used from the CLI, from other Python code, or in a browser (Pyodide).
 
-Static fonts (TTF, OTF, WOFF, WOFF2) pass through: only what the options ask for
+Static fonts (TTF, OTF, WOFF2) pass through: only what the options ask for
 changes (features, name, line height, letter spacing, subset) - same format, hinting
 kept, no extra files.
 
@@ -11,7 +11,7 @@ Variable fonts produce:
   - the variable font itself (with the same edits, otherwise unchanged) plus a
     static font for every named instance - when no axis options are given;
   - otherwise exactly what the axis options ask for: pinned values → static fonts,
-    ranges → trimmed variable fonts.
+    ranges → custom-range variable fonts.
 
     from fontmint import Options, mint
 
@@ -88,7 +88,7 @@ class Options:
                  empty keeps all.
     name:        new family name.
     axes:        axis tag → values, e.g. {"wght": "400,700", "wdth": [75, (75, 100)]}.
-                 Values pin (static fonts), MIN:MAX ranges trim (variable fonts),
+                 Values pin (static fonts), MIN:MAX ranges keep them variable (custom range),
                  "all" = every value used by the font's named instances.
                  Empty → variable font + every named instance.
     style_name:  style name when exactly one static font is built (375 → "Regular").
@@ -172,7 +172,7 @@ class FontInfo:
 @dataclass
 class Job:
     """One output built from a variable font. Picklable, so it can run in a
-    worker process. kind="static" pins every axis; kind="variable" trims axes."""
+    worker process. kind="static" pins every axis; kind="variable" sets custom axis ranges."""
 
     kind: str
     vf_bytes: bytes
@@ -388,7 +388,7 @@ def _named_instance_jobs(font: TTFont, italic: bool, job_args: dict) -> list[Job
 
 
 def _axis_jobs(font: TTFont, specs: dict, folder: str, italic: bool, job_args: dict) -> list[Job]:
-    """Jobs for --weight/--width/…: pinned combinations → static, ranges → trimmed variable."""
+    """Jobs for --weight/--width/…: pinned combinations → static, ranges → custom-range variable."""
     fvar_axes = [a.axisTag for a in font["fvar"].axes]
     defaults = {a.axisTag: a.defaultValue for a in font["fvar"].axes}
     weight = font["OS/2"].usWeightClass  # of a font without a weight axis
@@ -421,7 +421,7 @@ def _restyle(job: Job, style: str) -> None:
 
 
 def _describe(tag: str, v) -> str:
-    """File-name fragment for a trimmed variable font, e.g. 'wght300-700', 'Condensed'."""
+    """File-name fragment for a custom-range variable font, e.g. 'wght300-700', 'Condensed'."""
     if isinstance(v, tuple):
         return f"{tag}{v[0]:g}-{v[1]:g}"
     if tag == "wght":

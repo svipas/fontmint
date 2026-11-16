@@ -9,6 +9,6 @@ Initial release.
 - Rename the family (`--name`) without touching copyright, trademark or license notices.
 - Line height and letter spacing (`--line-height`, `--letter-spacing`).
 - Smaller fonts with only the characters you need (`--subset`).
-- Variable fonts: static fonts at any axis value, trimmed variable fonts, in TTF (hinted and unhinted), OTF and WOFF2.
+- Variable fonts: static fonts at any axis value, custom-range variable fonts, in TTF (hinted and unhinted), OTF and WOFF2.
 - Static fonts pass through in their own format.
 - `--info` shows a font's axes, named instances, features, languages and line height.

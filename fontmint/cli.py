@@ -12,14 +12,14 @@ Examples:
         --weight 400,500,600,700 --formats ttf,woff2
 
     # a weight between the standard ones, named "Regular"
-    fontmint JetBrainsMono*.ttf --features zero --name "JetBrains Mono Clear" \\
+    fontmint JetBrainsMono*.ttf --features zero --name "JetBrains Mono Zero" \\
         --weight 375 --style-name Regular
 
     # weights × widths (4 static fonts); quote file names with brackets
-    fontmint 'OpenSans[wdth,wght].ttf' --name "Open Sans X" --weight 400,700 --width 75,100
+    fontmint 'OpenSans[wdth,wght].ttf' --name "Open Sans Custom" --weight 400,700 --width 75,100
 
     # a smaller variable font: weights 300–700 only
-    fontmint InterVariable.ttf --name "Inter Light" --weight 300:700
+    fontmint InterVariable.ttf --name "Inter Text" --weight 300:700
 
     # a static font: freeze + rename only, same format, hinting kept
     fontmint FiraCode-Regular.ttf --features zero --name "Fira Code Zero"
@@ -157,10 +157,10 @@ def build_parser() -> argparse.ArgumentParser:
         allow_abbrev=False,
     )
     p.add_argument("fonts", nargs="+", type=Path, metavar="FONT",
-                   help="font file(s): variable or static TTF/OTF/WOFF/WOFF2")
+                   help="font file(s): variable or static TTF/OTF/WOFF2")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     p.add_argument("--info", action="store_true",
-                   help="show the font's axes, named instances, features and languages, then exit")
+                   help="show the font's axes, named instances, features and languages")
     p.add_argument("--features", default="", metavar="TAGS",
                    help="features to make the default (freeze), e.g. ss02,zero; for a feature with several "
                         "alternates, add a number: cv47=2 picks the second")

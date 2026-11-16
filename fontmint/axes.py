@@ -1,5 +1,5 @@
 """Axis values: parsing specs like "400,700", "300:700" or "all", and planning
-which static fonts / trimmed variable fonts to build.
+which static fonts / custom-range variable fonts to build.
 
     value  400        → pinned (static)
     range  300:700    → kept variable, limited to 300–700

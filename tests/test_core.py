@@ -399,7 +399,7 @@ class AxisOptionsTest(unittest.TestCase):
         with self.assertRaisesRegex(FontmintError, "exactly one static font"):
             self.build(style_name="Regular")  # default: 4 named instances
 
-    def test_range_trims_variable_font(self):
+    def test_range_makes_custom_range_variable_font(self):
         files = self.build(axes={"wght": "300:700"}, formats={"ttf", "woff2"})
         self.assertEqual(sorted(files), ["MintSans/variable/MintSans-wght300-700[wght,wdth].ttf",
                                          "MintSans/variable/MintSans-wght300-700[wght,wdth].woff2"])
