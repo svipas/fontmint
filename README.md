@@ -71,7 +71,7 @@ The page shows the same build as commands you can copy, so you can move to the c
 ## Installation
 
 > [!IMPORTANT]
-> Requires Python 3.10 or newer. Check with `python3 --version`; the Python included with macOS is 3.9, so install a newer one with Homebrew or from python.org.
+> Requires Python 3.11 or newer. Check with `python3 --version`; the Python included with macOS is 3.9, so install a newer one with Homebrew or from python.org.
 
 ```bash
 git clone https://github.com/svipas/fontmint.git

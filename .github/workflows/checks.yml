@@ -21,8 +21,11 @@ jobs:
     name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest
     strategy:
+      # Both versions report, instead of one failure cancelling the other.
+      fail-fast: false
       matrix:
-        python: ["3.10", "3.14"]
+        # The oldest Python fontmint supports (pyproject.toml) and the newest.
+        python: ["3.11", "3.14"]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

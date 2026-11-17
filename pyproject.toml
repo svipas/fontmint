@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "svipas" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = ["fonts", "opentype", "variable-fonts", "stylistic-sets", "fonttools", "woff2"]
 classifiers = [
     "Environment :: Console",

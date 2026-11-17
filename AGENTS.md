@@ -128,7 +128,7 @@ The command line and the website have their own versions, tags and GitHub Releas
 
 ## Taste
 
-- Python 3.10+, type hints, `from __future__ import annotations`, docstrings on public functions, lines up to about 120 characters. There is no linter config; match the surrounding code.
+- Python 3.11+ (fontTools 4.66 and newer need it), type hints, `from __future__ import annotations`, docstrings on public functions, lines up to about 120 characters. There is no linter config; match the surrounding code.
 - Standard library first. Python tests use `unittest`; don't add test or tooling dependencies to the Python package.
 - The website: TypeScript, React with React Compiler (don't import `useMemo`, `useCallback` or `memo`; oxlint rejects them), Tailwind, exact versions in `web/package.json`. Build the page from the shadcn components in `web/src/components/ui/` (add missing ones with `bunx shadcn add`; it imports `cn` from a package named `cn` and adds that package to `package.json`, so point the import at `@/lib/utils` and remove the package); hand-write an element only where shadcn has nothing that fits, such as the drop area or the preview's text box.
 - Default to no comment. Write one for a constraint, an external quirk or an invariant the code can't show.
