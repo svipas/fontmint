@@ -1,5 +1,4 @@
-# Every check, on pushes to main and on pull requests. The release workflows run it too;
-# release-web.yml also publishes the site it built.
+# Every check. The release workflows run it too, so a change here affects releases.
 name: Checks
 
 on:
@@ -21,7 +20,6 @@ jobs:
     name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest
     strategy:
-      # Both versions report, instead of one failure cancelling the other.
       fail-fast: false
       matrix:
         # The oldest Python fontmint supports (pyproject.toml) and the newest.
@@ -52,7 +50,6 @@ jobs:
         with:
           bun-version: 1.4.4
       - run: bun install --frozen-lockfile
-      # Pyodide and the wheels, downloaded once per version (assets.ts checks their hashes).
       - uses: actions/cache@v4
         with:
           path: web/.cache
@@ -60,7 +57,6 @@ jobs:
       - run: bun run assets
 
       - run: bunx oxfmt --check
-      # From the repo root, as AGENTS.md runs it (without the site's settings).
       - run: web/node_modules/.bin/oxfmt --check README.md AGENTS.md CHANGELOG.md docs
         working-directory: .
       - run: bun run lint --deny-warnings
