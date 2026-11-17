@@ -6,9 +6,7 @@ export const SUBSETS = ["latin", "latin-ext", "cyrillic", "cyrillic-ext", "greek
 
 export type Form = {
   name: string;
-  /** Features to freeze. */
   freeze: string[];
-  /** Features to turn off. */
   disable: string[];
   /** OpenType language tag whose forms to freeze (adds locl), or "". */
   language: string;

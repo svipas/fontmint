@@ -24,7 +24,6 @@ test("freeze a feature, rename and download the family", async ({ page }) => {
   await addFonts(page, fonts.variable, fonts.italic);
   await expect(page.getByText("TestSans-Italic[wght,wdth].ttf", { exact: true })).toBeVisible();
 
-  // The preview applies the feature right away and marks the characters it changes.
   await page.getByText("Slashed zero").click();
   const preview = page.getByRole("textbox", { name: "Preview text with your changes" });
   await expect(preview).toHaveCSS("font-feature-settings", /"ss01"/);
@@ -35,7 +34,6 @@ test("freeze a feature, rename and download the family", async ({ page }) => {
   const download = page.getByRole("link", { name: /Download MintSans\.zip/ });
   await expect(download).toBeVisible();
   await expect(page.getByText(/Built 20 files in/)).toBeVisible();
-  // The preview switches to the built font.
   await expect(page.getByRole("textbox", { name: "Preview text in your build" })).toBeVisible();
 
   const [file] = await Promise.all([page.waitForEvent("download"), download.click()]);

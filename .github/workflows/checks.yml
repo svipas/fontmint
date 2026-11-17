@@ -22,7 +22,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The oldest Python fontmint supports (pyproject.toml) and the newest.
         python: ["3.11", "3.14"]
     steps:
       - uses: actions/checkout@v5

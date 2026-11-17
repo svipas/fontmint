@@ -37,7 +37,7 @@ class SubsetTest(unittest.TestCase):
         font = fx.open_font(fx.static_ttf())
         font["Xtra"] = newTable("Xtra")  # a table fontTools doesn't know, so it can't subset it
         font["Xtra"].data = b"\0" * 4
-        with self.assertNoLogs(level="WARNING"):  # nothing reaches the terminal
+        with self.assertNoLogs(level="WARNING"):
             prepared = prepare(fx._save(font), Options(name="Mint Sans", subset="U+0030"))
         self.assertTrue(any("dropped the tables Xtra" in w for w in prepared.warnings), prepared.warnings)
         self.assertEqual(prepared.subset, (1, 8))

@@ -45,7 +45,6 @@ type State = {
   fonts: FontEntry[];
   form: Form;
   sample: string;
-  /** Axis values the preview shows. */
   previewAxes: Record<string, number>;
   /** Pyodide download of the first worker; null before it starts. */
   download: { loaded: number; total: number } | null;

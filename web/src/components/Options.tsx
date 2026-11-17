@@ -151,7 +151,6 @@ function Features({ fonts }: { fonts: ReadFont[] }) {
 
   const toggle = (feature: Feature, checked: boolean) => {
     const set = feature.kind === "optional" ? "freeze" : "disable";
-    // Optional: checked = freeze it on. On by default: unchecked = turn it off.
     const add = feature.kind === "optional" ? checked : !checked;
     const tags = new Set(form[set]);
     if (add) tags.add(feature.tag);

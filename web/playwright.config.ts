@@ -1,5 +1,4 @@
 // End-to-end tests against the production build: bun run build, then bun run e2e.
-// CI runs them in Chromium and Firefox on every push and before a deploy.
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 4173;

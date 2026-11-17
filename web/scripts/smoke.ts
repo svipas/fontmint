@@ -33,7 +33,6 @@ try {
   assert.deepEqual(folders(files), ["ttf-unhinted", "variable", "woff2-unhinted"]);
   assert.equal(Object.keys(files).length, 2 + 4 * 2);
 
-  // A custom range and one static font with a style name
   files = await build(fonts.variable, { name: "Mint Sans", axes: { wght: "300:700" }, formats: ["woff2"] });
   assert.deepEqual(folders(files), ["variable"]);
   files = await build(fonts.variable, {
@@ -47,11 +46,9 @@ try {
     Object.keys(files).join(", "),
   );
 
-  // Only the variable font
   files = await build(fonts.variable, { name: "Mint Sans", static: false, formats: ["ttf", "woff2"] });
   assert.deepEqual(folders(files), ["variable"]);
 
-  // Static input passes through as one file.
   files = await build(fonts.static, { features: "ss01", name: "Mint Sans", formats: ["ttf", "woff2"] });
   assert.equal(Object.keys(files).length, 1);
 

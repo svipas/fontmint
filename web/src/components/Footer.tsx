@@ -30,7 +30,6 @@ export function Footer() {
               {" "}
               ·{" "}
               <a
-                // Its release notes: the site only deploys from web-v* tags, so the release exists.
                 href={`${REPO}/releases/tag/web-v${manifest.site}`}
                 title={`Built from commit ${manifest.commit}`}
                 className={`${link} font-mono text-xs`}

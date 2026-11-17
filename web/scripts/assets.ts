@@ -49,7 +49,6 @@ await rm(join(pub, "wheels"), { recursive: true, force: true });
 await mkdir(join(pub, "pyodide"), { recursive: true });
 await mkdir(join(pub, "wheels"), { recursive: true });
 
-// Pyodide core, from its GitHub release
 const archive = join(cache, `pyodide-core-${PYODIDE}.tar.bz2`);
 await download(PYODIDE_CORE.url, PYODIDE_CORE.sha256, archive);
 await run(
@@ -89,7 +88,6 @@ for (const name of needed) {
   await Bun.write(join(pub, "pyodide", file_name), data);
 }
 
-// fontTools and fontmint wheels
 await Bun.write(
   join(pub, "wheels", FONTTOOLS.file),
   await download(FONTTOOLS.url, FONTTOOLS.sha256, join(cache, FONTTOOLS.file)),

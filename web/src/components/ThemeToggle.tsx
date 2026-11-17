@@ -12,7 +12,6 @@ const THEMES = [
 export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(storedTheme);
 
-  // Follows the system while "system" is chosen.
   useEffect(() => {
     if (theme !== "system") return;
     const media = systemDark();

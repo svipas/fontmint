@@ -280,7 +280,7 @@ def run(args: argparse.Namespace) -> None:
                 try:
                     files |= fut.result()
                 except Exception as e:  # FontmintError or a library error inside a worker
-                    pool.shutdown(wait=False, cancel_futures=True)  # don't start the remaining jobs
+                    pool.shutdown(wait=False, cancel_futures=True)
                     raise FontmintError(f"{path.name}: {job.stem}: {e}") from e
 
     log(f"writing to {out}/")

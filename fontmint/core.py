@@ -181,7 +181,7 @@ class Job:
     kind: str
     vf_bytes: bytes
     family: str
-    stem: str                                  # file name without extension
+    stem: str
     location: dict[str, float | tuple[float, float]]
     style: str = ""
     weight_class: int = 400
