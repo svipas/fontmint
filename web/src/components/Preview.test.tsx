@@ -1,0 +1,40 @@
+import { beforeEach, expect, test } from "bun:test";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { resetStore, withFonts } from "../../test/store";
+import { useStore } from "../store";
+import { Preview } from "./Preview";
+
+beforeEach(resetStore);
+
+const reset = () => screen.queryByRole("button", { name: "Reset size and axes" });
+
+function withLoadedFonts(...infos: Parameters<typeof withFonts>) {
+  withFonts(...infos);
+  useStore.setState({
+    fonts: useStore.getState().fonts.map((f, i) => ({ ...f, face: `fontmint-preview-${i}` })),
+    previewAxes: { wght: 400, wdth: 100 },
+  });
+}
+
+test("moved axes go back to the font's defaults", () => {
+  withLoadedFonts({});
+  render(<Preview />);
+  expect(reset()).toBeNull();
+
+  act(() => useStore.getState().setPreviewAxis("wght", 900));
+  expect(screen.getByText("900")).toBeTruthy();
+  fireEvent.click(reset()!);
+  expect(useStore.getState().previewAxes).toEqual({ wght: 400, wdth: 100 });
+  expect(reset()).toBeNull();
+  expect(document.activeElement?.getAttribute("type")).toBe("range");
+});
+
+test("the size goes back too", () => {
+  withLoadedFonts({});
+  render(<Preview />);
+  fireEvent.change(screen.getByLabelText("Size"), { target: { value: "40" } });
+  expect(screen.getByText("40px")).toBeTruthy();
+  fireEvent.click(reset()!);
+  expect(screen.getByText("28px")).toBeTruthy();
+  expect(reset()).toBeNull();
+});

@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { type Feature, featureList, languageName } from "@/lib/features";
-import { axisRanges, emptyStyle, type FormErrors, formErrors, type Style, SUBSETS } from "@/lib/options";
+import { axisRanges, emptyForm, emptyStyle, type FormErrors, formErrors, type Style, SUBSETS } from "@/lib/options";
 import { featureSettings, variationSettings } from "@/lib/preview";
 import type { FontInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -179,7 +179,11 @@ function Features({ fonts }: { fonts: ReadFont[] }) {
   };
 
   return (
-    <Section title="Features" summary={changed ? `${changed} changed` : undefined}>
+    <Section
+      title="Features"
+      summary={changed ? `${changed} changed` : undefined}
+      onReset={changed ? () => setForm({ freeze: [], disable: [], language: "" }) : undefined}
+    >
       {features.length >= SEARCH_FROM && (
         <InputGroup>
           <InputGroupAddon>
@@ -381,7 +385,12 @@ function Spacing({ infos, errors }: { infos: FontInfo[]; errors: FormErrors }) {
     .filter(Boolean)
     .join(" · ");
   return (
-    <Section title="Spacing" defaultOpen={false} summary={summary || undefined}>
+    <Section
+      title="Spacing"
+      defaultOpen={false}
+      summary={summary || undefined}
+      onReset={form.lineHeight || form.letterSpacing ? () => setForm({ lineHeight: "", letterSpacing: "" }) : undefined}
+    >
       <TextField
         id="line-height"
         label="Line height"
@@ -415,7 +424,12 @@ function Characters({ errors }: { errors: FormErrors }) {
   const kept = [...form.subset, ranges && "ranges"].filter(Boolean);
   const summary = kept.length > 2 ? `${kept.length} selected` : kept.join(", ");
   return (
-    <Section title="Characters" defaultOpen={false} summary={summary || undefined}>
+    <Section
+      title="Characters"
+      defaultOpen={false}
+      summary={summary || undefined}
+      onReset={form.subset.length || form.subsetRanges ? () => setForm({ subset: [], subsetRanges: "" }) : undefined}
+    >
       <div>
         <p className="text-sm font-medium">Keep only</p>
         <p className="mb-2 text-xs text-muted-foreground">
@@ -470,11 +484,19 @@ function Output({ infos, errors }: { infos: FontInfo[]; errors: FormErrors }) {
   const instances = Math.max(...infos.map((info) => info.instances.length));
   const custom = form.styles.some((style) => style.name.trim() || Object.values(style.axes).some((v) => v.trim()));
   const several = form.styles.length > 1;
+  const changed = !form.formats.own || !form.formats.woff2 || !form.staticFonts || several || custom;
   const setStyle = (row: number, change: Partial<Style>) =>
     setForm({ styles: form.styles.map((style, i) => (i === row ? { ...style, ...change } : style)) });
 
   return (
-    <Section title="Output">
+    <Section
+      title="Output"
+      onReset={
+        changed
+          ? () => setForm({ formats: emptyForm.formats, staticFonts: emptyForm.staticFonts, styles: emptyForm.styles })
+          : undefined
+      }
+    >
       <Field data-invalid={Boolean(errors.formats)} className="gap-1.5">
         <p className="w-full text-sm font-medium">
           <FlagLabel text="Formats" flag="--formats" />

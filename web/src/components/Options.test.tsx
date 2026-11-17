@@ -1,6 +1,7 @@
 import { beforeEach, expect, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { resetStore, withFonts } from "../../test/store";
+import { emptyForm } from "../lib/options";
 import { useStore } from "../store";
 import { Options, sampleCharacters } from "./Options";
 
@@ -145,4 +146,39 @@ test("a feature that swaps characters shows them, with a larger view on demand",
   // ss01 swaps 0 and I (test/fonts.ts); ss02 lists no single characters.
   expect(screen.getByRole("button", { name: "Show what Slashed zero changes" }).textContent).toBe("0I0I");
   expect(screen.queryByRole("button", { name: "Show what Stylistic set 2 changes" })).toBeNull();
+});
+
+const reset = (name: string) => screen.queryByRole("button", { name });
+
+test("each section resets its own options, and offers it only while something is changed", () => {
+  withFonts({});
+  render(<Options />);
+  expect(reset("Reset features")).toBeNull();
+  expect(reset("Reset output")).toBeNull();
+
+  fireEvent.click(screen.getByText("Stylistic set 2"));
+  fireEvent.click(screen.getByText("Standard ligatures"));
+  fireEvent.click(screen.getByText("WOFF2"));
+  act(() => useStore.getState().setForm({ name: "Mint Sans", language: "ROM", lineHeight: "1.4", subset: ["latin"] }));
+
+  fireEvent.click(reset("Reset features")!);
+  expect(reset("Reset features")).toBeNull();
+  expect(document.activeElement?.textContent).toContain("Features");
+  fireEvent.click(reset("Reset output")!);
+  const form = useStore.getState().form;
+  expect(form).toEqual({ ...emptyForm, name: "Mint Sans", lineHeight: "1.4", subset: ["latin"] });
+
+  fireEvent.click(reset("Reset spacing")!);
+  fireEvent.click(reset("Reset characters")!);
+  expect(useStore.getState().form).toEqual({ ...emptyForm, name: "Mint Sans" });
+});
+
+test("custom styles count as a change to the output", () => {
+  withFonts({});
+  render(<Options />);
+  fireEvent.click(screen.getByRole("button", { name: /Axis values and style names/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Add another style" }));
+  fireEvent.click(reset("Reset output")!);
+  expect(useStore.getState().form.styles).toEqual(emptyForm.styles);
+  expect(screen.queryByRole("group", { name: "Style 2" })).toBeNull();
 });

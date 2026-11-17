@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { transferables } from "./lib/protocol";
 import { fontInfo } from "../test/fonts";
-import { type FontEntry, orderByName, orderFonts, pickOutput } from "./store";
+import { defaultAxes, type FontEntry, orderByName, orderFonts, pickOutput } from "./store";
 
 const bytes = () => new Uint8Array(1);
 
@@ -78,4 +78,20 @@ test("before fonts are read, their file names give the order", () => {
     "Mono.otf",
     "Mono_Oblique.otf",
   ]);
+});
+
+test("an axis's default comes from the first font that has it", () => {
+  const fonts = [
+    { info: null },
+    { info: fontInfo({ axes: [["wght", 100, 400, 900]] }) },
+    {
+      info: fontInfo({
+        axes: [
+          ["wght", 100, 300, 900],
+          ["opsz", 14, 14, 32],
+        ],
+      }),
+    },
+  ];
+  expect(defaultAxes(fonts)).toEqual({ wght: 400, opsz: 14 });
 });

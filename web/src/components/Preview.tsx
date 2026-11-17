@@ -5,10 +5,11 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { changedCharacters, featureSettings, metricsStyle, SAMPLE_TEXT, variationSettings } from "@/lib/preview";
 import { cn } from "@/lib/utils";
-import { type PreviewMode, useStore } from "@/store";
-import { CARD } from "./ui";
+import { defaultAxes, type PreviewMode, useStore } from "@/store";
+import { CARD, ResetButton } from "./ui";
 
 const HIGHLIGHT = "fontmint-changed";
+const SIZE = 28;
 
 export function Preview() {
   const fonts = useStore((s) => s.fonts).filter((f) => f.info && f.face);
@@ -17,15 +18,17 @@ export function Preview() {
   const setSample = useStore((s) => s.setSample);
   const previewAxes = useStore((s) => s.previewAxes);
   const setPreviewAxis = useStore((s) => s.setPreviewAxis);
+  const resetPreviewAxes = useStore((s) => s.resetPreviewAxes);
   const builtFonts = useStore((s) => s.built);
   const builtWith = useStore((s) => s.builtWith);
   const mode = useStore((s) => s.previewMode);
   const setMode = useStore((s) => s.setPreviewMode);
   const [selected, setSelected] = useState(0);
-  const [size, setSize] = useState(28);
+  const [size, setSize] = useState(SIZE);
   const [marking, setMarking] = useState(true);
   const copy = useRef<HTMLDivElement>(null);
   const original = useRef<HTMLDivElement>(null);
+  const toolbar = useRef<HTMLDivElement>(null);
 
   const font = fonts[Math.min(selected, fonts.length - 1)];
   const built = mode === "build" ? builtFonts.find((b) => b.font === font?.name) : undefined;
@@ -68,6 +71,8 @@ export function Preview() {
   const location = staticBuild
     ? built.location
     : Object.fromEntries(font.info.axes.map(([tag]) => [tag, previewAxes[tag] ?? 0]));
+  const defaults = defaultAxes(fonts);
+  const moved = size !== SIZE || (!staticBuild && Object.entries(defaults).some(([tag, v]) => previewAxes[tag] !== v));
   const base: CSSProperties = {
     fontFamily: `"${font.face}", var(--font-mono)`,
     fontSize: `${size}px`,
@@ -91,7 +96,7 @@ export function Preview() {
 
   return (
     <Card className={cn(CARD, "gap-0 py-0 motion-safe:animate-in motion-safe:fade-in")}>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-b px-4 py-3">
+      <div ref={toolbar} className="flex flex-wrap items-center gap-x-5 gap-y-3 border-b px-4 py-3">
         {builtFonts.length > 0 && (
           <ToggleGroup
             aria-label="What the preview shows"
@@ -146,6 +151,20 @@ export function Preview() {
             Mark changed characters
           </label>
         </div>
+        {moved && (
+          // Overhangs the row instead of making it taller, so nothing moves when it appears.
+          <div className="-my-1 ml-auto">
+            <ResetButton
+              label="Reset size and axes"
+              onClick={() => {
+                setSize(SIZE);
+                resetPreviewAxes();
+                // The button goes away; focus moves to the first slider instead of the page.
+                toolbar.current?.querySelector<HTMLElement>('input[type="range"]')?.focus();
+              }}
+            />
+          </div>
+        )}
       </div>
 
       <div className="space-y-1.5 p-4 sm:p-6">

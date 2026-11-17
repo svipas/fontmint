@@ -65,6 +65,8 @@ type State = {
   setForm(change: Partial<Form>): void;
   setSample(sample: string): void;
   setPreviewAxis(tag: string, value: number): void;
+  /** Puts the preview's axes back at the fonts' default values. */
+  resetPreviewAxes(): void;
   setPreviewMode(mode: PreviewMode): void;
   startBuild(): Promise<void>;
   cancelBuild(): void;
@@ -162,8 +164,7 @@ export const useStore = create<State>()((set, get) => ({
     );
     // All of them at once, in their final order: the page changes once, not once per font.
     const done = new Map(results);
-    const previewAxes = { ...get().previewAxes };
-    for (const { info } of done.values()) for (const [tag, , value] of info?.axes ?? []) previewAxes[tag] ??= value;
+    const previewAxes = { ...defaultAxes([...done.values()]), ...get().previewAxes };
     set({
       fonts: orderFonts(get().fonts.map((f) => (done.has(f.name) ? { ...f, ...done.get(f.name) } : f))),
       previewAxes,
@@ -192,6 +193,10 @@ export const useStore = create<State>()((set, get) => ({
 
   setPreviewAxis(tag, value) {
     set({ previewAxes: { ...get().previewAxes, [tag]: value } });
+  },
+
+  resetPreviewAxes() {
+    set({ previewAxes: defaultAxes(get().fonts) });
   },
 
   setPreviewMode(previewMode) {
@@ -334,6 +339,13 @@ export const useStore = create<State>()((set, get) => ({
     stopWorkers();
   },
 }));
+
+/** Each axis at its default value, as the first font that has the axis defines it. */
+export function defaultAxes(fonts: { info: FontInfo | null }[]): Record<string, number> {
+  const axes: Record<string, number> = {};
+  for (const { info } of fonts) for (const [tag, , value] of info?.axes ?? []) axes[tag] ??= value;
+  return axes;
+}
 
 /** The family a font belongs to, as a build names it ("Inter Variable" builds "Inter"). */
 export function familyOf(info: FontInfo): string {

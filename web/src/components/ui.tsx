@@ -1,8 +1,8 @@
 // Small pieces shared by the page's sections.
-import { ChevronRightIcon, TerminalIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { ChevronRightIcon, RotateCcwIcon, TerminalIcon } from "lucide-react";
+import { type ReactNode, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
@@ -37,33 +37,73 @@ export function FlagLabel({ text, flag }: { text: ReactNode; flag?: string }) {
   );
 }
 
+/** Puts a group of settings back as they were; shown only while something in it is changed. */
+export function ResetButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button
+      variant="ghost"
+      size="xs"
+      // A finger-sized target around the small button.
+      className="relative text-muted-foreground after:absolute after:-inset-x-1 after:-inset-y-2.5"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
+      <RotateCcwIcon />
+      Reset
+    </Button>
+  );
+}
+
 /** A section of the options. Advanced ones start closed, and open by themselves when
  * something in them is set, so nothing changes the build out of sight. */
 export function Section({
   title,
   summary,
   defaultOpen = true,
+  onReset,
   children,
 }: {
   title: string;
   /** What is set inside, in a few words, shown while the section is closed. */
   summary?: string;
   defaultOpen?: boolean;
+  /** Given while something in the section is changed: puts it back to the defaults. */
+  onReset?: () => void;
   children: ReactNode;
 }) {
   // Decided once: the section shouldn't close while the user works in it.
   const [initiallyOpen] = useState(defaultOpen || Boolean(summary));
+  const trigger = useRef<HTMLButtonElement>(null);
   return (
     <Collapsible defaultOpen={initiallyOpen} className="border-t pt-4 first:border-t-0 first:pt-0">
-      <CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-2 rounded-md py-1 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-        <ChevronRightIcon className="size-4 text-muted-foreground transition-transform group-data-panel-open:rotate-90" />
-        <span className="eyebrow">{title}</span>
-        {summary && (
-          <Badge variant="secondary" className="ml-auto max-w-[60%] truncate font-normal group-data-panel-open:hidden">
-            {summary}
-          </Badge>
+      <div className="flex items-center gap-2">
+        <CollapsibleTrigger
+          ref={trigger}
+          className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md py-1 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-panel-open:rotate-90" />
+          <span className="eyebrow">{title}</span>
+          {summary && (
+            <Badge
+              variant="secondary"
+              className="ml-auto max-w-[60%] truncate font-normal group-data-panel-open:hidden"
+            >
+              {summary}
+            </Badge>
+          )}
+        </CollapsibleTrigger>
+        {onReset && (
+          <ResetButton
+            label={`Reset ${title.toLowerCase()}`}
+            onClick={() => {
+              onReset();
+              // The button goes away with the changes; focus stays in the section.
+              trigger.current?.focus();
+            }}
+          />
         )}
-      </CollapsibleTrigger>
+      </div>
       <CollapsibleContent className="space-y-4 pt-3">{children}</CollapsibleContent>
     </Collapsible>
   );
