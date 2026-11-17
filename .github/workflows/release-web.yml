@@ -1,0 +1,74 @@
+# Releases the website: on a web-v* tag (web-v0.2.0 for version 0.2.0 in web/package.json)
+# it runs every check, publishes web/dist/ to GitHub Pages and creates a GitHub Release
+# from web/CHANGELOG.md. Run by hand, it only redeploys the chosen branch or tag.
+# Not on every push to main: the public page would then run unreleased code on people's
+# fonts. Needs Settings → Pages → Source: GitHub Actions, and web-v* tags allowed in the
+# github-pages environment.
+name: Release the website
+
+on:
+  push:
+    tags: ["web-v[0-9]*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer one waits instead of cancelling a deploy halfway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: The tag matches web/package.json, and web/CHANGELOG.md has its section
+        if: github.ref_type == 'tag'
+        run: |
+          version=$(jq -r .version web/package.json)
+          if [ "web-v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::The tag is $GITHUB_REF_NAME, but web/package.json says $version"
+            exit 1
+          fi
+          if ! grep -qxF "## $version" web/CHANGELOG.md; then
+            echo "::error::web/CHANGELOG.md has no section ## $version"
+            exit 1
+          fi
+
+  checks:
+    needs: version
+    uses: ./.github/workflows/checks.yml
+    with:
+      pages: true
+
+  deploy:
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  release:
+    needs: deploy
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Release notes from web/CHANGELOG.md
+        run: |
+          version=${GITHUB_REF_NAME#web-v}
+          awk -v v="$version" '$0 == "## " v { found = 1; next } /^## / { found = 0 } found' web/CHANGELOG.md > notes.md
+      # Not marked "Latest": that stays the newest command-line release, the one people install.
+      - run: gh release create "$GITHUB_REF_NAME" --title "Website ${GITHUB_REF_NAME#web-v}" --notes-file notes.md --latest=false
+        env:
+          GH_TOKEN: ${{ github.token }}

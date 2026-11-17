@@ -1,5 +1,7 @@
 # Changelog
 
+What changed in fontmint's command line and library, per version. The website has its own versions: [web/CHANGELOG.md](web/CHANGELOG.md).
+
 ## 0.1.0
 
 Initial release.

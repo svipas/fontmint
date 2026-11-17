@@ -1,0 +1,149 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Dark styles follow <html data-theme="dark">, which theme.ts sets from the user's choice or the system. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* The shadcn components style by orientation (slider track, joined toggle buttons); Base UI
+   states it as data-orientation. */
+@custom-variant data-horizontal (&[data-orientation="horizontal"]);
+@custom-variant data-vertical (&[data-orientation="vertical"]);
+
+/* Catppuccin Latte (light) and Macchiato (dark): https://catppuccin.com/palette */
+:root {
+  --ctp-red: #d20f39;
+  --ctp-peach: #fe640b;
+  --ctp-yellow: #df8e1d;
+  --ctp-teal: #179299;
+  --ctp-text: #4c4f69;
+  --ctp-subtext1: #5c5f77;
+  --ctp-subtext0: #6c6f85;
+  --ctp-surface1: #bcc0cc;
+  --ctp-surface0: #ccd0da;
+  --ctp-base: #eff1f5;
+  --ctp-mantle: #e6e9ef;
+  --ctp-crust: #dce0e8;
+
+  /* Latte's teal is too light for white text and small text; this keeps its hue at 5:1. */
+  --mint: color-mix(in oklab, var(--ctp-teal), black 25%);
+  --mint-foreground: var(--ctp-base);
+  /* Translucent colors as hex: inside ::highlight and ::selection, the CSS compiler's
+     color-mix() output falls back to the solid color, which hides the text. */
+  --mark: #df8e1d38;
+  --selection: #1792994d;
+  --hover: #ccd0da99; /* surface0 at 60%: lighter than a pressed toggle (surface0) */
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --ctp-red: #ed8796;
+  --ctp-peach: #f5a97f;
+  --ctp-yellow: #eed49f;
+  --ctp-teal: #8bd5ca;
+  --ctp-text: #cad3f5;
+  --ctp-subtext1: #b8c0e0;
+  --ctp-subtext0: #a5adcb;
+  --ctp-surface1: #494d64;
+  --ctp-surface0: #363a4f;
+  --ctp-base: #24273a;
+  --ctp-mantle: #1e2030;
+  --ctp-crust: #181926;
+
+  --mint: var(--ctp-teal);
+  --mint-foreground: var(--ctp-crust);
+  --mark: #eed49f38;
+  --selection: #8bd5ca4d;
+  --hover: #363a4f99;
+
+  color-scheme: dark;
+}
+
+/* shadcn's tokens, from the palette. The page is mantle, cards are base. */
+:root {
+  --background: var(--ctp-mantle);
+  --foreground: var(--ctp-text);
+  --card: var(--ctp-base);
+  --card-foreground: var(--ctp-text);
+  --popover: var(--ctp-base);
+  --popover-foreground: var(--ctp-text);
+  --primary: var(--mint);
+  --primary-foreground: var(--mint-foreground);
+  --secondary: var(--ctp-surface0);
+  --secondary-foreground: var(--ctp-text);
+  --muted: var(--ctp-mantle);
+  --muted-foreground: var(--ctp-subtext0);
+  --accent: var(--hover);
+  --accent-foreground: var(--ctp-text);
+  --destructive: var(--ctp-red);
+  --warning: var(--ctp-peach);
+  --border: var(--ctp-surface0);
+  --input: var(--ctp-surface1);
+  --ring: var(--mint);
+  --radius: 0.625rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-crust: var(--ctp-crust);
+  --color-subtext: var(--ctp-subtext1);
+  --color-yellow: var(--ctp-yellow);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  ::selection {
+    background-color: var(--selection);
+  }
+}
+
+/* Characters the chosen features change, marked in the preview (CSS Custom Highlight API). */
+::highlight(fontmint-changed) {
+  background-color: var(--mark);
+  text-decoration: underline 2px var(--ctp-yellow);
+  text-underline-offset: 0.18em;
+}
+
+@layer components {
+  .flag {
+    @apply font-mono text-[11px] font-normal text-muted-foreground;
+  }
+  .eyebrow {
+    @apply text-[11px] font-semibold tracking-wider text-muted-foreground uppercase;
+  }
+}

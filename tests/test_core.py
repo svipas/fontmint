@@ -9,6 +9,7 @@ from fontTools.misc.xmlWriter import XMLWriter
 from fontTools.ttLib import newTable
 
 from fontmint import FontmintError, Options, inspect, mint, prepare
+from fontmint.core import check_clashes, output_paths
 
 from . import fixtures as fx
 
@@ -516,6 +517,18 @@ class InspectTest(unittest.TestCase):
         info = inspect(fx.static_otf())
         self.assertFalse(info.variable)
         self.assertEqual((info.axes, info.instances, info.family), ([], [], "Test Sans"))
+
+
+class OutputClashTest(unittest.TestCase):
+    def test_same_file_from_two_inputs(self):
+        prepared = prepare(fx.variable_ttf(), Options(name="Mint Sans", axes={"wght": "400"}, hint=False))
+        with self.assertRaisesRegex(FontmintError, "two inputs would both write MintSans-Regular into MintSans/"):
+            check_clashes([output_paths(prepared), output_paths(prepared)])
+
+    def test_different_files(self):
+        upright = prepare(fx.variable_ttf(), Options(name="Mint Sans", hint=False))
+        italic = prepare(fx.variable_ttf(italic=True), Options(name="Mint Sans", hint=False))
+        check_clashes([output_paths(upright), output_paths(italic)])
 
 
 class NativeHelpersOptionalTest(unittest.TestCase):

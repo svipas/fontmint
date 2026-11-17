@@ -1,0 +1,52 @@
+# Releases the command line and library: on a v* tag (v0.2.0 for version 0.2.0 in
+# pyproject.toml) it runs every check, builds the wheel and source archive, and creates a
+# GitHub Release with them and the notes from CHANGELOG.md. The website has its own
+# releases (release-web.yml).
+name: Release the command line
+
+on:
+  push:
+    tags: ["v[0-9]*"]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: The tag matches pyproject.toml, and CHANGELOG.md has its section
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::The tag is $GITHUB_REF_NAME, but pyproject.toml says $version"
+            exit 1
+          fi
+          if ! grep -qxF "## $version" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section ## $version"
+            exit 1
+          fi
+
+  checks:
+    needs: version
+    uses: ./.github/workflows/checks.yml
+
+  release:
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - run: python -m pip install build==1.2.2 && python -m build
+      - name: Release notes from CHANGELOG.md
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          awk -v v="$version" '$0 == "## " v { found = 1; next } /^## / { found = 0 } found' CHANGELOG.md > notes.md
+      - run: gh release create "$GITHUB_REF_NAME" --title "fontmint ${GITHUB_REF_NAME#v}" --notes-file notes.md dist/*
+        env:
+          GH_TOKEN: ${{ github.token }}

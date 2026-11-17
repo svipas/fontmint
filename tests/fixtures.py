@@ -16,6 +16,8 @@ from __future__ import annotations
 import io
 from functools import cache
 
+from fontTools import varLib
+from fontTools.designspaceLib import DesignSpaceDocument
 from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.t2CharStringPen import T2CharStringPen
 from fontTools.pens.ttGlyphPen import TTGlyphPen
@@ -187,6 +189,20 @@ def variable_ttf(italic: bool = False, hinted: bool = False, scan_control: bool 
     fb = _builder(True, LATIN, LATIN_CMAP, LATIN_FEATURES, italic=italic, hinted=hinted, scan_control=scan_control)
     _add_variations(fb, LATIN, italic)
     return _save(fb.font)
+
+
+@cache
+def variable_cff2() -> bytes:
+    """Variable CFF2 (OTF) font: wght 400–700, two named instances."""
+    ds = DesignSpaceDocument()
+    ds.addAxisDescriptor(tag="wght", name="Weight", minimum=400, default=400, maximum=700)
+    for wght, dx in ((400, 0), (700, 80)):
+        boxes = {name: (box[0], box[1], box[2] + dx, box[3]) if box else None for name, box in LATIN.items()}
+        master = _builder(False, boxes, LATIN_CMAP, LATIN_FEATURES, italic=False, hinted=False).font
+        ds.addSourceDescriptor(font=master, location={"Weight": wght})
+    for style, wght in (("Regular", 400), ("Bold", 700)):
+        ds.addInstanceDescriptor(styleName=style, location={"Weight": wght})
+    return _save(varLib.build(ds)[0])
 
 
 @cache

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.cache/
+public/pyodide/
+public/wheels/
+public/manifest.json
+public/samples/
+test-results/
+playwright-report/

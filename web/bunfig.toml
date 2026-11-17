@@ -1,0 +1,6 @@
+# The dev server (bun --hot dev.ts) bundles HTML imports with these plugins; build.ts passes its own.
+[serve.static]
+plugins = ["bun-plugin-tailwind"]
+
+[test]
+preload = ["./test/setup.ts"]

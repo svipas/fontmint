@@ -5,6 +5,7 @@ from fontTools.ttLib.tables import otTables
 
 from fontmint.common import FontmintError
 from fontmint.features import (
+    changed_characters,
     disable_features,
     feature_names,
     freeze_features,
@@ -29,6 +30,11 @@ class FeaturesTest(unittest.TestCase):
         self.assertEqual(cmap[ord("0")], "zero.ss01")
         self.assertEqual(cmap[ord("I")], "I.ss01")
         self.assertEqual(cmap[ord("H")], "H")
+
+    def test_changed_characters(self):
+        font = fx.open_font(fx.static_ttf())
+        self.assertEqual(changed_characters(font, ["ss01", "liga", "zero"]), {"ss01": [ord("0"), ord("I")]})
+        self.assertEqual(font.getBestCmap()[ord("0")], "zero")
 
     def test_freeze_works_on_variable_and_cff(self):
         for data in (fx.variable_ttf(), fx.static_otf()):

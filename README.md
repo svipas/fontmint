@@ -8,7 +8,14 @@
 </p>
 
 <p align="center">
+  <a href="https://svipas.github.io/fontmint/"><strong>Try it in your browser →</strong></a>
+  &nbsp;·&nbsp;
+  <a href="#installation"><strong>Install the command line</strong></a>
+</p>
+
+<p align="center">
   <a href="#features">Features</a> ·
+  <a href="#web-version">Web version</a> ·
   <a href="#installation">Installation</a> ·
   <a href="#usage">Usage</a> ·
   <a href="#options">Options</a> ·
@@ -28,6 +35,8 @@ fontmint InterVariable*.ttf --features ss02 --name "Inter Clear"
 
 This command builds 94 files: the Inter font with its `ss02` set (slashed zero, `I` with serifs, `l` with a tail - characters that are easy to tell apart) as the default, renamed to **Inter Clear**, in every weight and format.
 
+The same build also runs in your browser at **[svipas.github.io/fontmint](https://svipas.github.io/fontmint/)**, and your fonts never leave your computer.
+
 ## Features
 
 - **Freeze features** - make stylistic sets and character variants (`ss02`, `cv05`, `zero`, …) the default glyphs (letter shapes), so they appear in every app, even apps that can't turn on OpenType features. Ligatures and rules that depend on neighboring characters are updated to work with the frozen glyphs.
@@ -43,6 +52,21 @@ This command builds 94 files: the Inter font with its `ss02` set (slashed zero, 
 - **Hinted and unhinted** - static TTF and WOFF2 files built from variable fonts come in both versions. Hinting adds instructions that make small text sharper on low-resolution (low-DPI) Windows screens. Fonts that include their own hinting keep it.
 - **OTF when you need it** - static fonts with CFF (PostScript) outlines for apps that require them, optimized to be smaller than the TTFs.
 - **Fast** - fonts are built in parallel across all CPU cores.
+
+## Web version
+
+**[svipas.github.io/fontmint](https://svipas.github.io/fontmint/)** runs fontmint in your browser. Your fonts never leave your computer: fontmint runs on your device with [Pyodide](https://pyodide.org) (Python in WebAssembly).
+
+It can freeze and turn off features, rename, change line height and letter spacing, subset, and build variable and static fonts at any axis value. A few things need the command line:
+
+| Needs the command line                           | Why                                                                                                                                          |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hinted static fonts** (`*-hinted/`)            | ttfautohint is a native program that can't run in the browser                                                                                |
+| **Static OTF fonts**                             | they need skia-pathops and cffsubr to merge and compact outlines                                                                             |
+| **Picking one of several alternates** (`cv47=2`) | the page turns features on or off; the command line can pick an alternate                                                                    |
+| **Large families, fast**                         | about three times slower in the browser for a family like Inter: one worker per font (at most 4), where the command line uses every CPU core |
+
+The page shows the same build as commands you can copy, so you can move to the command line at any time.
 
 ## Installation
 
@@ -387,6 +411,15 @@ Options also take the same text as the command line, like `features="ss02,cv47=2
 
 ```bash
 .venv/bin/python -m unittest
+```
+
+The website lives in `web/` and needs [Bun](https://bun.com):
+
+```bash
+cd web
+bun install
+bun run assets   # Pyodide, fontTools and a fontmint wheel built from this repo
+bun run dev      # dev server with hot reload
 ```
 
 Tests build tiny fonts in code, so the repo contains no binary fixtures. For the project layout, design rules and how to verify changes, see [AGENTS.md](AGENTS.md) and [docs/](docs/). They are written for AI coding agents, but are just as useful for human contributors.

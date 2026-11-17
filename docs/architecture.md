@@ -17,7 +17,7 @@ read every input   ──bytes──▶  prepare(font_bytes, Options) ─▶ Pre
                                  ├─ static input   → letter spacing; files = {path: same-format bytes}, jobs = []
                                  └─ variable input → files = variable output with letter spacing (default mode only)
                                                      jobs  = static + custom-range Jobs
-check output paths across all inputs (output_paths)
+check_clashes(output_paths of every input)
 ProcessPoolExecutor ─ Job ─▶  build_job(Job) → {path: bytes}
                                  ├─ instantiateVariableFont(location)
                                  ├─ add_letter_spacing   (metrics.py)
@@ -70,7 +70,31 @@ The CLI writes nothing until every input is prepared and every job has succeeded
 | `skia-pathops`   | overlap removal before CFF        | `Options(remove_overlaps=False)`    |
 | `cffsubr`        | CFF subroutinization              | `Options(subroutinize=False)`       |
 
-With all three off, a run imports none of them (tested in `test_core.NativeHelpersOptionalTest`) - the prerequisite for a possible Pyodide/browser build, where they can't run.
+With all three off, a run imports none of them (tested in `test_core.NativeHelpersOptionalTest`). That is what lets the website run the core in the browser, where they can't run.
+
+## Web version
+
+`web/` is a static page on GitHub Pages that runs the same core in [Pyodide](https://pyodide.org) (CPython in WebAssembly), in Web Workers. There is no server: fonts are read, built and zipped in the browser.
+
+```text
+page (React, zustand)  ──postMessage──▶  worker.ts ─▶ pyodide/fontmint.ts ─▶ fontmint_web.py ─▶ core
+  lib/options.ts: form → options dict       one Pyodide per worker              describe / prepare / check_clashes /
+  store.ts: workers, progress, zip URL                                          build / zip_files
+```
+
+Decisions that aren't visible in the code:
+
+- **Why Pyodide.** The core is already bytes in, bytes out, so the browser runs the code the CLI runs. A rewrite would have to re-verify freezing and its repairs; HarfBuzz in WebAssembly can subset and instance, but not freeze or rename.
+- **How fontmint gets in.** Pyodide's own fontTools is too old for fontmint, and installing `fontmint` with its dependencies would make micropip fetch `fonttools[woff]` from PyPI, which wants a brotli and zopfli that have no WebAssembly builds. So Pyodide loads its own `micropip` and `brotli`, and a pinned pure-Python fontTools wheel and the fontmint wheel are installed from Pyodide's file system with `deps=False`. Zopfli isn't needed: WOFF2 uses only brotli. Every file is served by the site itself, checked against pinned hashes by `scripts/assets.ts`; the browser never asks a CDN or PyPI.
+- **Never hinted, no static OTF.** ttfautohint-py and cffsubr run bundled programs through `subprocess`, and skia-pathops is a C extension Pyodide doesn't ship. The glue always sets `hint=False` and refuses `otf` for TrueType variable input. Static OTF without overlap removal and subroutinization would be possible, but worse than the CLI's (unmerged overlaps, about twice the size), so the page points to the CLI instead. CFF2 variable fonts keep `otf`, as they never need a helper. A source's own hinting would survive without ttfautohint, but the page can't tell hinted sources apart yet.
+- **One worker per font,** at most 4 and one fewer than the CPU cores; each holds about 140 MB of WebAssembly memory. Workers prepare their fonts, then one runs `core.check_clashes` over every input's output paths (the reason it moved out of `cli.py`), and only then do they build - the CLI's "check everything, then write" rule. One worker zips everything with Python's `zipfile`, in the CLI's folder layout.
+- **Fresh workers per build.** WebAssembly memory never shrinks, so every build ends its workers, and Cancel terminates them. The worker that read the fonts builds the first one; the others start only once it has Pyodide, so they load it from the browser cache instead of downloading 14.5 MB each. A worker that can't load Pyodide, or crashes, is replaced on the next call. Pyodide reports some failures (its `.wasm` file not arriving) outside the promise it returned, so `worker.ts` forwards unhandled errors as a `crash` message instead of leaving the page waiting.
+- **The worker is a second entry point.** Bun's bundler doesn't follow `new Worker(...)`: `build.ts` builds `src/worker.ts` as `worker.js`, and `dev.ts` builds it on request. The glue module is bundled into it as text and written into Pyodide's file system.
+- **The preview needs no Python.** The dropped font is loaded with the `FontFace` API and shown with CSS `font-feature-settings` and `font-variation-settings`. `describe()` lists, per feature, the characters freezing it swaps (`features.changed_characters`); the page marks them with the CSS Custom Highlight API, which paints over the text without splitting it into elements, so shaping is unchanged. After a build, the preview shows the built font itself, without CSS features.
+- **Several custom styles are several plans.** `--style-name` names one static font per run, so the page's list of styles (375 as Regular, 675 as Bold) is sent as `styles`, and the glue plans the font once per style and merges the plans (`_merge`); the core is unchanged. The copied command line is one command per style for the same reason.
+- **Checks run twice.** The page repeats fontmint's field checks so errors show as the user types (`formErrors()` in `lib/options.ts`); the core checks again when building, and its message is shown as it is. The two must change together.
+- **Tests:** `tests/test_web.py` runs the glue on desktop Python; `bun test` covers `lib/`, the store and components (workers mocked); `bun run smoke` runs `pyodide/fontmint.ts` and the glue in Pyodide under Bun; Playwright runs the production build in Chromium and Firefox. Component tests run without React Compiler; the end-to-end tests cover the compiled build.
+- **Its own releases.** The website has its own version (`web/package.json`), `web-v*` tags and changelog, so it can ship without a command-line release and the other way around. It deploys only on such a tag or by hand, never on a push to `main`, so the public page always runs released code. It runs the core at its commit, which may be ahead of the last `v*` release; `manifest.json` records both versions and the commit, and the footer shows the website's version, linked to that commit.
 
 ## Under the hood
 

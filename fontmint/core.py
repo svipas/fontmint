@@ -22,6 +22,7 @@ Variable fonts produce:
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 
 from fontTools.ttLib import TTFont
@@ -507,6 +508,17 @@ def mark_monospaced(font: TTFont) -> None:
 def output_paths(prepared: Prepared) -> list[str]:
     """Every path `prepared` will produce (before building), for collision checks."""
     return [*prepared.files, *(f"{job.folder}/{job.kind}/{job.stem}" for job in prepared.jobs)]
+
+
+def check_clashes(outputs: list[list[str]]) -> None:
+    """Fail if two inputs would write the same file. `outputs` holds each input's
+    output_paths(), so the check also works where the inputs were prepared apart."""
+    paths = Counter(path for paths in outputs for path in paths)
+    if clashes := sorted(path for path, n in paths.items() if n > 1):
+        folder, name = clashes[0].split("/")[0], clashes[0].split("/")[-1]
+        raise FontmintError(f"two inputs would both write {name} into {folder}/: the same font was given twice, "
+                            "or different families got the same --name (build them separately, with different "
+                            "names)")
 
 
 def mint(font_bytes: bytes, options: Options | None = None) -> dict[str, bytes]:

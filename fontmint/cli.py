@@ -46,7 +46,6 @@ import argparse
 import os
 import re
 import sys
-from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -246,12 +245,7 @@ def run(args: argparse.Namespace) -> None:
         except FontmintError as e:
             raise FontmintError(f"{path.name}: {e}") from e
 
-    paths = Counter(p for _, prepared in prepared_fonts for p in core.output_paths(prepared))
-    if clashes := sorted(p for p, n in paths.items() if n > 1):
-        folder, name = clashes[0].split("/")[0], clashes[0].split("/")[-1]
-        raise FontmintError(f"two inputs would both write {name} into {folder}/: the same font was given twice, "
-                            "or different families got the same --name (build them separately, with different "
-                            "names)")
+    core.check_clashes([core.output_paths(prepared) for _, prepared in prepared_fonts])
 
     for path, prepared in prepared_fonts:
         log(path.name)

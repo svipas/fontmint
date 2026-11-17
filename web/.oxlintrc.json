@@ -1,0 +1,45 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "jsx-a11y", "oxc", "unicorn"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "error",
+    "react/error-boundaries": "error",
+    "react/globals": "error",
+    "react/immutability": "error",
+    "react/incompatible-library": "error",
+    "react/purity": "error",
+    "react/refs": "error",
+    "react/set-state-in-effect": "error",
+    "react/set-state-in-render": "error",
+    "react/static-components": "error",
+    "react/unsupported-syntax": "error",
+    "react/use-memo": "error",
+    "react/void-use-memo": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "react",
+            "importNames": ["useMemo", "useCallback", "memo"],
+            "message": "React Compiler memoizes components and values; write plain code instead."
+          }
+        ]
+      }
+    ],
+    "react/react-in-jsx-scope": "off",
+    "unicorn/require-post-message-target-origin": "off",
+    "no-underscore-dangle": [
+      "warn",
+      {
+        "allow": ["_module"]
+      }
+    ]
+  },
+  "ignorePatterns": ["dist", "public", "node_modules"]
+}

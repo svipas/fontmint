@@ -58,6 +58,33 @@ def language_tags(font: TTFont) -> list[str]:
     return sorted({lang.LangSysTag.strip() for script in scripts for lang in script.Script.LangSysRecord})
 
 
+def changed_characters(font: TTFont, tags: list[str]) -> dict[str, list[int]]:
+    """For each feature, the characters whose glyph freezing it on its own would swap
+    (its one-to-one rules, as freezing applies them), so a preview can mark them.
+    Features that change no character are left out. The font isn't changed."""
+    if "GSUB" not in font or not font["GSUB"].table.FeatureList:
+        return {}
+    gsub = font["GSUB"].table
+    lookups = gsub.LookupList.Lookup
+    position = _run_positions(gsub)
+    cmap = {cp: glyph for cp, glyph in (font.getBestCmap() or {}).items() if not _private_use(cp)}
+    changed = {}
+    for tag in tags:
+        maps = [_one_to_one_map(lookups[i], 1)[0]
+                for i in sorted(_feature_lookups(gsub, tag), key=lambda i: (position[i], i))]
+        maps = [mapping for mapping in maps if mapping]
+        codepoints = []
+        for codepoint, glyph in cmap.items():
+            new = glyph
+            for mapping in maps:
+                new = mapping.get(new, new)
+            if new != glyph:
+                codepoints.append(codepoint)
+        if codepoints:
+            changed[tag] = sorted(codepoints)
+    return changed
+
+
 def parse_features(features: str) -> dict[str, int]:
     """'ss01, cv47=14,' → {'ss01': 1, 'cv47': 14}. The number picks an alternate
     (1 = first), for features that offer several."""

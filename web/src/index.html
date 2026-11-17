@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script>
+      // The stored theme, before the first paint (src/lib/theme.ts keeps it up to date).
+      (function () {
+        var theme = null;
+        try {
+          theme = localStorage.getItem("fontmint-theme");
+        } catch (e) {}
+        if (theme !== "light" && theme !== "dark")
+          theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+
+    <title>fontmint – customize fonts in your browser: freeze features, rename, export</title>
+    <meta
+      name="description"
+      content="Make stylistic sets, slashed zero and other OpenType features the default, rename the family, adjust spacing, and export variable and static TTF and WOFF2 fonts. Free and open source; runs in your browser, so your fonts never leave your computer."
+    />
+    <meta
+      name="keywords"
+      content="font customization, freeze OpenType features, stylistic sets, ss01, slashed zero, rename font family, variable font to static, instance variable font, WOFF2, coding font, fontTools"
+    />
+    <meta name="author" content="Benas Svipas" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://svipas.github.io/fontmint/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="fontmint" />
+    <meta property="og:url" content="https://svipas.github.io/fontmint/" />
+    <meta property="og:title" content="fontmint – make a font yours" />
+    <meta
+      property="og:description"
+      content="Freeze OpenType features, rename the family and export variable and static fonts, right in your browser. Your fonts never leave your computer."
+    />
+    <meta property="og:image" content="https://svipas.github.io/fontmint/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="fontmint: make a font yours" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="fontmint – make a font yours" />
+    <meta
+      name="twitter:description"
+      content="Freeze OpenType features, rename the family and export variable and static fonts, right in your browser."
+    />
+    <meta name="twitter:image" content="https://svipas.github.io/fontmint/og.png" />
+
+    <meta name="theme-color" content="#e6e9ef" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1e2030" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="stylesheet" href="./app.css" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "fontmint",
+        "url": "https://svipas.github.io/fontmint/",
+        "description": "Make OpenType features the default, rename the family, adjust spacing, and export variable and static fonts, in your browser.",
+        "applicationCategory": "DesignApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript and WebAssembly",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "license": "https://opensource.org/licenses/MIT",
+        "codeRepository": "https://github.com/svipas/fontmint",
+        "author": { "@type": "Person", "name": "Benas Svipas", "url": "https://github.com/svipas" }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root">
+      <noscript>
+        <h1>fontmint – make a font yours</h1>
+        <p>
+          Make stylistic sets and other OpenType features the default, rename the family, adjust spacing, and export
+          variable and static fonts, in your browser. fontmint needs JavaScript and WebAssembly. Without them, use the
+          command line from <a href="https://github.com/svipas/fontmint#installation">GitHub</a>.
+        </p>
+      </noscript>
+    </div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
