@@ -118,7 +118,7 @@ The command line and the website have their own versions, tags and GitHub Releas
 - **Command line and library:** bump `version` in `pyproject.toml`, give the changes a `## <version>` section in `CHANGELOG.md`, then tag `v<version>`. `.github/workflows/release-cli.yml` runs every check and creates the release with the wheel, the source archive and that section as notes.
 - **Website:** bump `version` in `web/package.json`, add its section to `web/CHANGELOG.md`, then tag `web-v<version>`. `.github/workflows/release-web.yml` runs every check, deploys to GitHub Pages and creates the release.
 - A tag that doesn't match its version file, or a version without a changelog section, fails the release before anything is published.
-- A website release runs the core as it is at that commit, which can be ahead of the last command-line release; the footer shows the website's version, linked to the commit it was built from.
+- A website release runs the core as it is at that commit, which can be ahead of the last command-line release; the footer shows the website's version, linked to its release, and the commit on hover.
 
 ## Commits
 

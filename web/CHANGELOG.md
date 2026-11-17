@@ -2,6 +2,10 @@
 
 What changed on [svipas.github.io/fontmint](https://svipas.github.io/fontmint/), per website version (`web/package.json`). The website has its own versions and `web-v*` tags; fontmint's command line and library are in the [main changelog](../CHANGELOG.md).
 
+## 0.1.1
+
+- The version in the footer opens its release notes, instead of the commit the site was built from.
+
 ## 0.1.0
 
 First version.
