@@ -2,7 +2,7 @@
 
 What changed on [svipas.github.io/fontmint](https://svipas.github.io/fontmint), per website version (`web/package.json`). The website has its own versions and `web-v*` tags; fontmint's command line and library are in the [main changelog](../CHANGELOG.md).
 
-## Next
+## 0.2.0
 
 - Reset buttons put the preview's size and axes, and each group of options (features, spacing, characters, output), back to their defaults in one click.
 - The new family name starts filled in from your font ("Inter Custom" for Inter), so you can build right away.
