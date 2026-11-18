@@ -72,6 +72,13 @@ function nameError(value: string, what: string): string | undefined {
   if (!value.replaceAll(" ", "").replaceAll(".", "")) return `${what} needs letters or digits`;
 }
 
+/** The name the form suggests for a family ("Inter Variable" → "Inter Custom"); "" when the
+ * family's own name has characters a name can't use. */
+export function suggestedName(family: string): string {
+  const name = `${family.replace(/ Variable$/, "")} Custom`;
+  return nameError(name, "") ? "" : name;
+}
+
 function numberError(text: string, [low, high]: readonly [number, number], example: string): string | undefined {
   if (!text.trim()) return;
   const value = Number(text);

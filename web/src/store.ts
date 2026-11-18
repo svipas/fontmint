@@ -1,7 +1,7 @@
 // The page's state: dropped fonts, the form, the workers and the build.
 import { create } from "zustand";
 import { CancelledError, FontmintWorker } from "./lib/client";
-import { emptyForm, type Form, webOptions } from "./lib/options";
+import { emptyForm, type Form, suggestedName, webOptions } from "./lib/options";
 import { loadFace } from "./lib/preview";
 import { type BuildEvent, type Files, type FontInfo, FontmintError, type Manifest, type Plan } from "./lib/types";
 
@@ -65,7 +65,6 @@ type State = {
   setForm(change: Partial<Form>): void;
   setSample(sample: string): void;
   setPreviewAxis(tag: string, value: number): void;
-  /** Puts the preview's axes back at the fonts' default values. */
   resetPreviewAxes(): void;
   setPreviewMode(mode: PreviewMode): void;
   startBuild(): Promise<void>;
@@ -164,21 +163,30 @@ export const useStore = create<State>()((set, get) => ({
     );
     // All of them at once, in their final order: the page changes once, not once per font.
     const done = new Map(results);
-    const previewAxes = { ...defaultAxes([...done.values()]), ...get().previewAxes };
+    const fonts = orderFonts(get().fonts.map((f) => (done.has(f.name) ? { ...f, ...done.get(f.name) } : f)));
     set({
-      fonts: orderFonts(get().fonts.map((f) => (done.has(f.name) ? { ...f, ...done.get(f.name) } : f))),
-      previewAxes,
+      fonts,
+      previewAxes: { ...defaultAxes(fonts), ...get().previewAxes },
+      form: followName(get().form, get().fonts, fonts),
     });
   },
 
   removeFont(name) {
     const fonts = get().fonts.filter((f) => f.name !== name);
-    set({ fonts, notice: null });
+    set({ fonts, notice: null, form: followName(get().form, get().fonts, fonts) });
     // Back at the start page: the last build belongs to fonts that are gone.
     if (!fonts.length) {
       const { build } = get();
       if (build.status === "done") URL.revokeObjectURL(build.url);
-      set({ build: { status: "idle" }, log: [], warnings: [], built: [], builtWith: null, previewMode: "live" });
+      set({
+        build: { status: "idle" },
+        log: [],
+        warnings: [],
+        built: [],
+        builtWith: null,
+        previewMode: "live",
+        previewAxes: {},
+      });
     }
   },
 
@@ -339,6 +347,18 @@ export const useStore = create<State>()((set, get) => ({
     stopWorkers();
   },
 }));
+
+/** The name the fonts suggest: their first family's, or "" before any font is read. */
+export function nameFor(fonts: FontEntry[]): string {
+  const info = fonts.find((f) => f.info)?.info;
+  return info ? suggestedName(familyOf(info)) : "";
+}
+
+/** The name follows the fonts' suggestion until the user changes it. */
+function followName(form: Form, before: FontEntry[], after: FontEntry[]): Form {
+  const name = nameFor(after);
+  return form.name === nameFor(before) && form.name !== name ? { ...form, name } : form;
+}
 
 /** Each axis at its default value, as the first font that has the axis defines it. */
 export function defaultAxes(fonts: { info: FontInfo | null }[]): Record<string, number> {

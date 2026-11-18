@@ -1,10 +1,14 @@
 # Website changelog
 
-What changed on [svipas.github.io/fontmint](https://svipas.github.io/fontmint/), per website version (`web/package.json`). The website has its own versions and `web-v*` tags; fontmint's command line and library are in the [main changelog](../CHANGELOG.md).
+What changed on [svipas.github.io/fontmint](https://svipas.github.io/fontmint), per website version (`web/package.json`). The website has its own versions and `web-v*` tags; fontmint's command line and library are in the [main changelog](../CHANGELOG.md).
 
 ## Next
 
 - Reset buttons put the preview's size and axes, and each group of options (features, spacing, characters, output), back to their defaults in one click.
+- The new family name starts filled in from your font ("Inter Custom" for Inter), so you can build right away.
+- A larger preview, from a bigger size or line height, no longer pushes the options down, away from your fonts.
+- Large preview text wraps inside its card instead of running past the edge.
+- The preview's sliders stay smooth on slower phones: the feature samples follow the axes once you stop moving them.
 
 ## 0.1.1
 

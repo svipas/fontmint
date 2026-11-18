@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://svipas.github.io/fontmint/"><strong>Try it in your browser →</strong></a>
+  <a href="https://svipas.github.io/fontmint"><strong>Try it in your browser →</strong></a>
   &nbsp;·&nbsp;
   <a href="#installation"><strong>Install the command line</strong></a>
 </p>
@@ -35,7 +35,7 @@ fontmint InterVariable*.ttf --features ss02 --name "Inter Clear"
 
 This command builds 94 files: the Inter font with its `ss02` set (slashed zero, `I` with serifs, `l` with a tail - characters that are easy to tell apart) as the default, renamed to **Inter Clear**, in every weight and format.
 
-The same build also runs in your browser at **[svipas.github.io/fontmint](https://svipas.github.io/fontmint/)**, and your fonts never leave your computer.
+The same build also runs in your browser at **[svipas.github.io/fontmint](https://svipas.github.io/fontmint)**, and your fonts never leave your computer.
 
 ## Features
 
@@ -55,7 +55,7 @@ The same build also runs in your browser at **[svipas.github.io/fontmint](https:
 
 ## Web version
 
-**[svipas.github.io/fontmint](https://svipas.github.io/fontmint/)** runs fontmint in your browser. Your fonts never leave your computer: fontmint runs on your device with [Pyodide](https://pyodide.org) (Python in WebAssembly).
+**[svipas.github.io/fontmint](https://svipas.github.io/fontmint)** runs fontmint in your browser. Your fonts never leave your computer: fontmint runs on your device with [Pyodide](https://pyodide.org) (Python in WebAssembly).
 
 It can freeze and turn off features, rename, change line height and letter spacing, subset, and build variable and static fonts at any axis value. A few things need the command line:
 

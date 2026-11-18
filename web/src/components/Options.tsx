@@ -1,5 +1,5 @@
 import { ArrowRightIcon, ChevronRightIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,7 +19,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { type Feature, featureList, languageName } from "@/lib/features";
-import { axisRanges, emptyForm, emptyStyle, type FormErrors, formErrors, type Style, SUBSETS } from "@/lib/options";
+import {
+  axisRanges,
+  emptyForm,
+  emptyStyle,
+  type FormErrors,
+  formErrors,
+  type Style,
+  SUBSETS,
+  suggestedName,
+} from "@/lib/options";
 import { featureSettings, variationSettings } from "@/lib/preview";
 import type { FontInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -95,9 +104,9 @@ function TextField(props: {
 function NameField({ family, error }: { family: string; error?: string }) {
   const name = useStore((s) => s.form.name);
   const setForm = useStore((s) => s.setForm);
-  // "Required" waits until the field was left once; other problems show as you type.
-  const [left, setLeft] = useState(false);
-  const shown = name.trim() || left ? error : undefined;
+  // "Required" waits until the field was edited or left once; other problems show as you type.
+  const [touched, setTouched] = useState(false);
+  const shown = name.trim() || touched ? error : undefined;
   return (
     <TextField
       id="name"
@@ -105,11 +114,14 @@ function NameField({ family, error }: { family: string; error?: string }) {
       flag="--name"
       className="h-9 text-base md:text-base"
       value={name}
-      placeholder={`e.g. ${family.replace(/ Variable$/, "")} Custom`}
+      placeholder={`e.g. ${suggestedName(family) || "Mint Sans"}`}
       error={shown}
       description="Your build installs next to the original under this name. Copyright and license notices stay."
-      onChange={(value) => setForm({ name: value })}
-      onBlur={() => setLeft(true)}
+      onChange={(value) => {
+        setTouched(true);
+        setForm({ name: value });
+      }}
+      onBlur={() => setTouched(true)}
     />
   );
 }
@@ -128,6 +140,27 @@ function More({ title, set, children }: { title: string; set: boolean; children:
   );
 }
 
+const SETTLE_MS = 150;
+
+/** The preview's axis values once its sliders rest. Restyling every feature's sample on each
+ * step of a slider made the sliders stutter on slower devices. */
+function useSettledPreviewAxes(): Record<string, number> {
+  const [axes, setAxes] = useState(() => useStore.getState().previewAxes);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = useStore.subscribe((state, previous) => {
+      if (state.previewAxes === previous.previewAxes) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => setAxes(state.previewAxes), SETTLE_MS);
+    });
+    return () => {
+      unsubscribe();
+      clearTimeout(timer);
+    };
+  }, []);
+  return axes;
+}
+
 /** Fonts with more features than this get a search field. */
 const SEARCH_FROM = 9;
 
@@ -136,6 +169,7 @@ function Features({ fonts }: { fonts: ReadFont[] }) {
   const setForm = useStore((s) => s.setForm);
   const [query, setQuery] = useState("");
   const search = useRef<HTMLInputElement>(null);
+  const axes = useSettledPreviewAxes();
   const infos = fonts.map((f) => f.info);
   const features = featureList(infos);
   const languages = [...new Set(infos.flatMap((info) => info.languages))].toSorted();
@@ -165,7 +199,7 @@ function Features({ fonts }: { fonts: ReadFont[] }) {
         <label className="flex cursor-pointer items-center gap-2.5 rounded-md px-1.5 py-1 hover:bg-accent">
           <Checkbox checked={checked} onCheckedChange={(value) => toggle(feature, value)} />
           <span className="min-w-0 flex-1 truncate text-sm">{feature.label}</span>
-          {feature.kind === "optional" && <Sample feature={feature} fonts={fonts} />}
+          {feature.kind === "optional" && <Sample feature={feature} fonts={fonts} axes={axes} />}
           <span className="flag">{feature.tag}</span>
         </label>
       </li>
@@ -298,13 +332,12 @@ const SAMPLE_BOX = "inline-flex h-6 min-w-6 items-center justify-center rounded-
  * and the same larger in a card on hover, tap or Enter. Only for features that swap single
  * characters (fontmint lists those); ligatures and other rules that depend on the text
  * around them have no one sample. */
-function Sample({ feature, fonts }: { feature: Feature; fonts: ReadFont[] }) {
-  const previewAxes = useStore((s) => s.previewAxes);
+function Sample({ feature, fonts, axes }: { feature: Feature; fonts: ReadFont[]; axes: Record<string, number> }) {
   const font = fonts.find((f) => f.face && f.info.changes[feature.tag]?.length);
   const all = font ? shownCharacters(font.info.changes[feature.tag]!) : [];
   if (!font || !all.length) return null;
   // At the preview's axis values, so the sample has the weight the preview shows.
-  const location = Object.fromEntries(font.info.axes.map(([tag, , value]) => [tag, previewAxes[tag] ?? value]));
+  const location = Object.fromEntries(font.info.axes.map(([tag, , value]) => [tag, axes[tag] ?? value]));
   const original = { fontFamily: `"${font.face}"`, fontVariationSettings: variationSettings(location) };
   const changed = {
     ...original,

@@ -182,3 +182,28 @@ test("custom styles count as a change to the output", () => {
   expect(useStore.getState().form.styles).toEqual(emptyForm.styles);
   expect(screen.queryByRole("group", { name: "Style 2" })).toBeNull();
 });
+
+test("clearing the name asks for one right away", () => {
+  withFonts({});
+  act(() => useStore.getState().setForm({ name: "Test Sans Custom" }));
+  render(<Options />);
+  const name = screen.getByLabelText(/New family name/);
+  fireEvent.change(name, { target: { value: "" } });
+  expect(screen.getByText(/Give your build its own name/)).toBeTruthy();
+  expect(name.getAttribute("placeholder")).toBe("e.g. Test Sans Custom");
+});
+
+test("feature samples follow the preview's axes once the sliders rest", async () => {
+  withFonts({});
+  useStore.setState({
+    fonts: useStore.getState().fonts.map((f) => ({ ...f, face: "fontmint-preview-1" })),
+    previewAxes: { wght: 400, wdth: 100 },
+  });
+  render(<Options />);
+  const sample = screen.getByRole("button", { name: "Show what Slashed zero changes" }).querySelector("span")!;
+  expect(sample.style.fontVariationSettings).toBe('"wght" 400, "wdth" 100');
+  act(() => useStore.getState().setPreviewAxis("wght", 900));
+  expect(sample.style.fontVariationSettings).toBe('"wght" 400, "wdth" 100');
+  await act(() => new Promise((resolve) => setTimeout(resolve, 200)));
+  expect(sample.style.fontVariationSettings).toBe('"wght" 900, "wdth" 100');
+});

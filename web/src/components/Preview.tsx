@@ -12,7 +12,8 @@ const HIGHLIGHT = "fontmint-changed";
 const SIZE = 28;
 
 export function Preview() {
-  const fonts = useStore((s) => s.fonts).filter((f) => f.info && f.face);
+  const allFonts = useStore((s) => s.fonts);
+  const fonts = allFonts.filter((f) => f.info && f.face);
   const form = useStore((s) => s.form);
   const sample = useStore((s) => s.sample) || SAMPLE_TEXT;
   const setSample = useStore((s) => s.setSample);
@@ -71,7 +72,7 @@ export function Preview() {
   const location = staticBuild
     ? built.location
     : Object.fromEntries(font.info.axes.map(([tag]) => [tag, previewAxes[tag] ?? 0]));
-  const defaults = defaultAxes(fonts);
+  const defaults = defaultAxes(allFonts);
   const moved = size !== SIZE || (!staticBuild && Object.entries(defaults).some(([tag, v]) => previewAxes[tag] !== v));
   const base: CSSProperties = {
     fontFamily: `"${font.face}", var(--font-mono)`,
@@ -96,75 +97,77 @@ export function Preview() {
 
   return (
     <Card className={cn(CARD, "gap-0 py-0 motion-safe:animate-in motion-safe:fade-in")}>
-      <div ref={toolbar} className="flex flex-wrap items-center gap-x-5 gap-y-3 border-b px-4 py-3">
-        {builtFonts.length > 0 && (
-          <ToggleGroup
-            aria-label="What the preview shows"
-            variant="outline"
-            size="sm"
-            spacing={0}
-            value={[mode]}
-            onValueChange={(value: string[]) => value[0] && setMode(value[0] as PreviewMode)}
-          >
-            <ToggleGroupItem value="live">Live preview</ToggleGroupItem>
-            <ToggleGroupItem value="build">Your build</ToggleGroupItem>
-          </ToggleGroup>
-        )}
-        {fonts.length > 1 && (
-          <ToggleGroup
-            aria-label="Font to preview"
-            size="sm"
-            className="max-w-full flex-wrap"
-            value={[font.name]}
-            onValueChange={(value: string[]) => {
-              const index = fonts.findIndex((f) => f.name === value[0]);
-              if (index >= 0) setSelected(index);
-            }}
-          >
-            {fonts.map((f) => (
-              <ToggleGroupItem key={f.name} value={f.name} title={f.name}>
-                {labels[f.name]}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        )}
-        <AxisSlider label="Size" value={size} min={12} max={96} step={1} unit="px" onChange={setSize} />
-        {!staticBuild &&
-          font.info.axes.map(([tag, min, , max]) => (
-            <AxisSlider
-              key={tag}
-              label={tag}
-              value={location[tag]!}
-              min={min}
-              max={max}
-              step={tag === "wght" || tag === "wdth" ? 1 : 0.1}
-              onChange={(value) => setPreviewAxis(tag, value)}
-            />
-          ))}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Switch id="mark-changes" size="sm" checked={marking} onCheckedChange={setMarking} />
-          <label htmlFor="mark-changes" className="flex cursor-pointer items-center gap-1.5">
-            <span
-              className="inline-block size-2.5 rounded-sm border-b-2 border-yellow bg-yellow/25"
-              aria-hidden="true"
-            />
-            Mark changed characters
-          </label>
-        </div>
-        {moved && (
-          // Overhangs the row instead of making it taller, so nothing moves when it appears.
-          <div className="-my-1 ml-auto">
-            <ResetButton
-              label="Reset size and axes"
-              onClick={() => {
-                setSize(SIZE);
-                resetPreviewAxes();
-                // The button goes away; focus moves to the first slider instead of the page.
-                toolbar.current?.querySelector<HTMLElement>('input[type="range"]')?.focus();
+      <div ref={toolbar} className="space-y-3 border-b px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          {builtFonts.length > 0 && (
+            <ToggleGroup
+              aria-label="What the preview shows"
+              variant="outline"
+              size="sm"
+              spacing={0}
+              value={[mode]}
+              onValueChange={(value: string[]) => value[0] && setMode(value[0] as PreviewMode)}
+            >
+              <ToggleGroupItem value="live">Live preview</ToggleGroupItem>
+              <ToggleGroupItem value="build">Your build</ToggleGroupItem>
+            </ToggleGroup>
+          )}
+          {fonts.length > 1 && (
+            <ToggleGroup
+              aria-label="Font to preview"
+              size="sm"
+              className="max-w-full flex-wrap"
+              value={[font.name]}
+              onValueChange={(value: string[]) => {
+                const index = fonts.findIndex((f) => f.name === value[0]);
+                if (index >= 0) setSelected(index);
               }}
-            />
+            >
+              {fonts.map((f) => (
+                <ToggleGroupItem key={f.name} value={f.name} title={f.name}>
+                  {labels[f.name]}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          )}
+          <AxisSlider label="Size" value={size} min={12} max={96} step={1} unit="px" onChange={setSize} />
+          {!staticBuild &&
+            font.info.axes.map(([tag, min, , max]) => (
+              <AxisSlider
+                key={tag}
+                label={tag}
+                value={location[tag]!}
+                min={min}
+                max={max}
+                step={tag === "wght" || tag === "wdth" ? 1 : 0.1}
+                onChange={(value) => setPreviewAxis(tag, value)}
+              />
+            ))}
+        </div>
+        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Switch id="mark-changes" size="sm" checked={marking} onCheckedChange={setMarking} />
+            <label htmlFor="mark-changes" className="flex cursor-pointer items-center gap-1.5">
+              <span
+                className="inline-block size-2.5 rounded-sm border-b-2 border-yellow bg-yellow/25"
+                aria-hidden="true"
+              />
+              Mark changed characters
+            </label>
           </div>
-        )}
+          {moved && (
+            <div className="-my-1">
+              <ResetButton
+                label="Reset size and axes"
+                onClick={() => {
+                  setSize(SIZE);
+                  resetPreviewAxes();
+                  toolbar.current?.querySelector<HTMLElement>('input[type="range"]')?.focus();
+                }}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="space-y-1.5 p-4 sm:p-6">
@@ -190,7 +193,7 @@ export function Preview() {
           <p className="text-xs text-warning">You changed options after this build. Build again to see them here.</p>
         )}
         {/* The copy behind the text box sizes it to its text and carries the marks. */}
-        <div className="grid">
+        <div className="grid grid-cols-[minmax(0,1fr)]">
           <div
             ref={copy}
             aria-hidden="true"

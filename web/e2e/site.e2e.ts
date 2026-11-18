@@ -96,6 +96,10 @@ test("two named static fonts in one build", async ({ page }) => {
 
 test("fields are checked as you type", async ({ page }) => {
   await addFonts(page, fonts.variable);
+  await expect(nameField(page)).toHaveValue("Test Sans Custom");
+  await expect(buildButton(page)).toBeEnabled();
+  await nameField(page).fill("");
+  await expect(page.getByText(/Give your build its own name/)).toBeVisible();
   await expect(buildButton(page)).toBeDisabled();
   await nameField(page).fill("Mint/Sans");
   await expect(page.getByText(/can only use ASCII letters/)).toBeVisible();
@@ -106,6 +110,7 @@ test("fields are checked as you type", async ({ page }) => {
 
 test("the message by Build takes you to the field to fix", async ({ page }) => {
   await addFonts(page, fonts.variable);
+  await nameField(page).fill("");
   await page.mouse.wheel(0, 2000);
   await page.getByRole("button", { name: "Give your build a family name to start." }).click();
   await expect(nameField(page)).toBeFocused();
@@ -167,4 +172,24 @@ test("static input passes through as one file", async ({ page }) => {
   await nameField(page).fill("Mint Sans");
   await buildButton(page).click();
   await expect(page.getByText(/Built 1 file in/)).toBeVisible();
+});
+
+test("the page stays put as the preview changes", async ({ page }) => {
+  await addFonts(page, fonts.variable);
+  const preview = page.getByRole("textbox", { name: "Preview text with your changes" });
+  const top = async (locator: typeof preview) => (await locator.boundingBox())!.y;
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    const before = await top(preview);
+    await page.getByLabel("wght", { exact: true }).press("ArrowRight");
+    await expect(page.getByRole("button", { name: "Reset size and axes" })).toBeVisible();
+    expect(await top(preview)).toBe(before);
+    await page.getByRole("button", { name: "Reset size and axes" }).click();
+  }
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const name = nameField(page);
+  const before = await top(name);
+  await page.getByLabel("Size", { exact: true }).press("End");
+  expect(await top(name)).toBe(before);
 });

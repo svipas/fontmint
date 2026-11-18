@@ -37,20 +37,18 @@ export function FlagLabel({ text, flag }: { text: ReactNode; flag?: string }) {
   );
 }
 
-/** Puts a group of settings back as they were; shown only while something in it is changed. */
 export function ResetButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <Button
       variant="ghost"
       size="xs"
-      // A finger-sized target around the small button.
-      className="relative text-muted-foreground after:absolute after:-inset-x-1 after:-inset-y-2.5"
+      className="relative text-muted-foreground after:absolute after:-inset-x-1 after:-inset-y-2"
       aria-label={label}
       title={label}
       onClick={onClick}
     >
       <RotateCcwIcon />
-      Reset
+      <span className="max-[340px]:hidden">Reset</span>
     </Button>
   );
 }
@@ -98,7 +96,6 @@ export function Section({
             label={`Reset ${title.toLowerCase()}`}
             onClick={() => {
               onReset();
-              // The button goes away with the changes; focus stays in the section.
               trigger.current?.focus();
             }}
           />

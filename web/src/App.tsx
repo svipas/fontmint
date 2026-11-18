@@ -24,7 +24,8 @@ export function App() {
       <Header />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 sm:px-6 sm:pt-10">
         {hasFonts ? (
-          <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
+          // auto 1fr: a taller preview grows the second row, not the font list's.
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)] lg:grid-rows-[auto_1fr]">
             <div className="lg:col-start-2 lg:row-start-1">
               <FontList />
             </div>

@@ -4,7 +4,7 @@ fontmint is a Python CLI and library for making your own builds of fonts. It fre
 
 You can think of fontmint as "take the font you like and make it yours" - without opening a font editor.
 
-The same core also runs in the browser: [svipas.github.io/fontmint](https://svipas.github.io/fontmint/) runs it with Pyodide (Python in WebAssembly), so fonts never leave the user's computer. That page lives in `web/`.
+The same core also runs in the browser: [svipas.github.io/fontmint](https://svipas.github.io/fontmint) runs it with Pyodide (Python in WebAssembly), so fonts never leave the user's computer. That page lives in `web/`.
 
 ## What makes fontmint special?
 

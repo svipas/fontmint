@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { transferables } from "./lib/protocol";
 import { fontInfo } from "../test/fonts";
-import { defaultAxes, type FontEntry, orderByName, orderFonts, pickOutput } from "./store";
+import { emptyForm } from "./lib/options";
+import { defaultAxes, type FontEntry, nameFor, orderByName, orderFonts, pickOutput, useStore } from "./store";
 
 const bytes = () => new Uint8Array(1);
 
@@ -94,4 +95,31 @@ test("an axis's default comes from the first font that has it", () => {
     },
   ];
   expect(defaultAxes(fonts)).toEqual({ wght: 400, opsz: 14 });
+});
+
+test("the name follows the fonts' suggestion until the user changes it", () => {
+  const inter = font("Inter.ttf", fontInfo({ family: "Inter Variable" }));
+  const mono = font("Mono.ttf", fontInfo({ family: "JetBrains Mono" }));
+  for (const [name, left] of [
+    ["Inter Custom", "JetBrains Mono Custom"],
+    ["Mint Sans", "Mint Sans"],
+    ["", ""],
+  ] as const) {
+    useStore.setState({ fonts: [inter, mono], form: { ...emptyForm, name } });
+    useStore.getState().removeFont("Inter.ttf");
+    expect(useStore.getState().form.name).toBe(left);
+  }
+  useStore.setState({
+    fonts: [mono],
+    form: { ...emptyForm, name: "JetBrains Mono Custom" },
+    previewAxes: { wght: 700 },
+  });
+  useStore.getState().removeFont("Mono.ttf");
+  expect(useStore.getState().form.name).toBe("");
+  expect(useStore.getState().previewAxes).toEqual({});
+});
+
+test("the suggested name comes from the first font read", () => {
+  expect(nameFor([font("A.ttf", null), font("B.ttf", fontInfo({ family: "Inter Variable" }))])).toBe("Inter Custom");
+  expect(nameFor([font("A.ttf", null)])).toBe("");
 });

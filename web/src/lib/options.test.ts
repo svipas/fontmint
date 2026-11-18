@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { fontInfo } from "../../test/fonts";
-import { cliCommands, emptyForm, type Form, formErrors, type Style, shellQuote, webOptions } from "./options";
+import {
+  cliCommands,
+  emptyForm,
+  type Form,
+  formErrors,
+  type Style,
+  shellQuote,
+  suggestedName,
+  webOptions,
+} from "./options";
 
 const one = (...args: Parameters<typeof cliCommands>) => cliCommands(...args).join("\n");
 /** A form with one custom style from `axes` and `styleName`, the way most tests need it. */
@@ -234,4 +243,11 @@ test("shellQuote", () => {
   expect(shellQuote("Inter.ttf")).toBe("Inter.ttf");
   expect(shellQuote("it's here")).toBe(`'it'\\''s here'`);
   expect(shellQuote("$(rm -rf ~)")).toBe("'$(rm -rf ~)'");
+});
+
+test("the suggested name: the family without Variable, as a custom build", () => {
+  expect(suggestedName("Inter Variable")).toBe("Inter Custom");
+  expect(suggestedName("JetBrains Mono")).toBe("JetBrains Mono Custom");
+  expect(suggestedName("Noto Sans 日本")).toBe("");
+  expect(suggestedName("Font/Bold")).toBe("");
 });
