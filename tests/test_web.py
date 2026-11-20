@@ -52,8 +52,10 @@ class DescribeTest(unittest.TestCase):
 
 class VariableBuildTest(unittest.TestCase):
     def test_default_build_is_unhinted_ttf_and_woff2(self):
-        with mock.patch("fontmint.core.autohint", side_effect=AssertionError("hinted")), \
-                mock.patch("fontmint.core.ttf_to_otf", side_effect=AssertionError("otf")):
+        with (
+            mock.patch("fontmint.core.autohint", side_effect=AssertionError("hinted")),
+            mock.patch("fontmint.core.ttf_to_otf", side_effect=AssertionError("otf")),
+        ):
             paths, files, events = run(fx.variable_ttf(), {"features": "ss01", "name": "Mint Sans"})
 
         self.assertEqual({p.split("/")[1] for p in files}, {"variable", "ttf-unhinted", "woff2-unhinted"})
@@ -68,19 +70,23 @@ class VariableBuildTest(unittest.TestCase):
         self.assertEqual(jobs[1]["where"], "wght 700, wdth 100")
 
     def test_jobs_say_where_on_the_axes(self):
-        _, _, events = run(fx.variable_ttf(), {"name": "Mint Sans", "axes": {"wght": "375,300:700"},
-                                               "style_name": ""})
-        self.assertEqual([(e["style"], e["where"]) for e in events if e["type"] == "job"],
-                         [("MintSans-W375", "wght 375, wdth 100"), ("MintSans-wght300-700[wght,wdth]", "wght 300–700")])
+        _, _, events = run(fx.variable_ttf(), {"name": "Mint Sans", "axes": {"wght": "375,300:700"}, "style_name": ""})
+        self.assertEqual(
+            [(e["style"], e["where"]) for e in events if e["type"] == "job"],
+            [("MintSans-W375", "wght 375, wdth 100"), ("MintSans-wght300-700[wght,wdth]", "wght 300–700")],
+        )
 
     def test_several_named_styles_in_one_build(self):
         styles = [{"axes": {"wght": "375"}, "style_name": "Regular"}, {"axes": {"wght": "675"}, "style_name": "Bold"}]
         paths, files, events = run(fx.variable_ttf(), {"name": "Mint Sans", "formats": ["ttf"], "styles": styles})
-        self.assertEqual(sorted(files), ["MintSans/ttf-unhinted/MintSans-Bold.ttf",
-                                         "MintSans/ttf-unhinted/MintSans-Regular.ttf"])
+        self.assertEqual(
+            sorted(files), ["MintSans/ttf-unhinted/MintSans-Bold.ttf", "MintSans/ttf-unhinted/MintSans-Regular.ttf"]
+        )
         self.assertEqual(len(paths), 2)
-        self.assertEqual([(e["style"], e["where"], e["done"], e["total"]) for e in events if e["type"] == "job"],
-                         [("MintSans-Regular", "wght 375, wdth 100", 1, 2), ("MintSans-Bold", "wght 675, wdth 100", 2, 2)])
+        self.assertEqual(
+            [(e["style"], e["where"], e["done"], e["total"]) for e in events if e["type"] == "job"],
+            [("MintSans-Regular", "wght 375, wdth 100", 1, 2), ("MintSans-Bold", "wght 675, wdth 100", 2, 2)],
+        )
         self.assertEqual(logged(events, warning=True), [])
 
     def test_two_styles_building_the_same_font(self):
@@ -114,23 +120,30 @@ class VariableBuildTest(unittest.TestCase):
 
     def test_failed_job_names_the_file_and_style(self):
         web.prepare("TestSans.ttf", fx.variable_ttf(), {"name": "Mint Sans"}, print)
-        with mock.patch("fontmint_web.build_job", side_effect=ValueError("broken outline")), \
-                self.assertRaisesRegex(FontmintError, "^TestSans.ttf: MintSans-Regular: broken outline"):
+        with (
+            mock.patch("fontmint_web.build_job", side_effect=ValueError("broken outline")),
+            self.assertRaisesRegex(FontmintError, "^TestSans.ttf: MintSans-Regular: broken outline"),
+        ):
             web.build("TestSans.ttf", print)
 
 
 class Cff2BuildTest(unittest.TestCase):
     def test_variable_font_stays_otf(self):
         _, files, events = run(fx.variable_cff2(), {"name": "Mint Sans", "formats": ["otf", "woff2"]})
-        self.assertEqual(sorted(files), ["MintSans/variable/MintSans[wght].otf", "MintSans/variable/MintSans[wght].woff2"])
+        self.assertEqual(
+            sorted(files), ["MintSans/variable/MintSans[wght].otf", "MintSans/variable/MintSans[wght].woff2"]
+        )
         self.assertTrue(any("only the variable font is built" in text for text in logged(events, warning=True)))
 
 
 class StaticInputTest(unittest.TestCase):
     def test_keeps_its_format_without_warnings(self):
         # The page sends its usual options; static input ignores the output ones quietly.
-        _, files, events = run(fx.static_otf(), {"features": "ss01", "name": "Mint Sans", "formats": ["ttf", "woff2"],
-                                                 "static": True}, name="TestSans-Regular.otf")
+        _, files, events = run(
+            fx.static_otf(),
+            {"features": "ss01", "name": "Mint Sans", "formats": ["ttf", "woff2"], "static": True},
+            name="TestSans-Regular.otf",
+        )
         self.assertEqual(list(files), ["MintSans/MintSans-Regular.otf"])
         self.assertEqual(logged(events, warning=True), [])
         self.assertEqual([e for e in events if e["type"] == "job"], [])
@@ -141,8 +154,10 @@ class ClashAndZipTest(unittest.TestCase):
         events: list[dict] = []
         web.prepare("Upright.ttf", fx.variable_ttf(), {"name": "Mint Sans", "static": False}, events.append)
         web.prepare("Italic.ttf", fx.variable_ttf(italic=True), {"name": "Mint Sans", "static": False}, events.append)
-        self.assertEqual(list(web.build("Italic.ttf", print)), ["MintSans/variable/MintSans-Italic[wght,wdth].ttf",
-                                                                "MintSans/variable/MintSans-Italic[wght,wdth].woff2"])
+        self.assertEqual(
+            list(web.build("Italic.ttf", print)),
+            ["MintSans/variable/MintSans-Italic[wght,wdth].ttf", "MintSans/variable/MintSans-Italic[wght,wdth].woff2"],
+        )
         self.assertEqual(len(web.build("Upright.ttf", print)), 2)
 
     def test_two_inputs_writing_the_same_file(self):

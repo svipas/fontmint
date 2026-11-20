@@ -7,13 +7,27 @@ from fontTools.ttLib import TTFont
 from .common import FontmintError, get_name, text
 
 WEIGHT_NAMES = {
-    100: "Thin", 200: "ExtraLight", 300: "Light", 400: "Regular", 500: "Medium",
-    600: "SemiBold", 700: "Bold", 800: "ExtraBold", 900: "Black",
+    100: "Thin",
+    200: "ExtraLight",
+    300: "Light",
+    400: "Regular",
+    500: "Medium",
+    600: "SemiBold",
+    700: "Bold",
+    800: "ExtraBold",
+    900: "Black",
 }
 # (wdth axis value in %, style name); index + 1 = OS/2 usWidthClass
 WIDTHS = [
-    (50, "UltraCondensed"), (62.5, "ExtraCondensed"), (75, "Condensed"), (87.5, "SemiCondensed"),
-    (100, ""), (112.5, "SemiExpanded"), (125, "Expanded"), (150, "ExtraExpanded"), (200, "UltraExpanded"),
+    (50, "UltraCondensed"),
+    (62.5, "ExtraCondensed"),
+    (75, "Condensed"),
+    (87.5, "SemiCondensed"),
+    (100, ""),
+    (112.5, "SemiExpanded"),
+    (125, "Expanded"),
+    (150, "ExtraExpanded"),
+    (200, "UltraExpanded"),
 ]
 # Name IDs that carry the family name. Copyright (0), trademark (7), manufacturer,
 # designer, description, URLs and license (8–14) are never touched.
@@ -36,16 +50,19 @@ def check_name(value: str, what: str) -> None:
     """Reject names that would give an invalid PostScript name or an unsafe folder name."""
     bad = sorted({c for c in value if c != " " and (not 33 <= ord(c) <= 126 or c in FORBIDDEN_CHARS)})
     if bad:
-        raise FontmintError(f"{what} may only use ASCII letters, digits, spaces and punctuation "
-                            f"except {''.join(sorted(FORBIDDEN_CHARS))} (found {' '.join(bad)})")
+        raise FontmintError(
+            f"{what} may only use ASCII letters, digits, spaces and punctuation "
+            f"except {''.join(sorted(FORBIDDEN_CHARS))} (found {' '.join(bad)})"
+        )
     if value.replace(" ", "").strip(".") == "":
         raise FontmintError(f"{what} must contain letters or digits")
 
 
 def check_ps_length(name: str) -> str:
     if len(name) > 63:
-        raise FontmintError(f"PostScript name '{name}' is longer than 63 characters; use a shorter --name "
-                            "or --style-name")
+        raise FontmintError(
+            f"PostScript name '{name}' is longer than 63 characters; use a shorter --name or --style-name"
+        )
     return name
 
 
@@ -101,16 +118,21 @@ def rename_family(font: TTFont, old: str, new: str) -> list[str]:
 
     warnings = []
     if old_ps_name and get_name(font, 6) == old_ps_name and old_ps_name.replace(old_ps, new_ps) == old_ps_name:
-        warnings.append(f"the PostScript name '{old_ps_name}' doesn't contain the family name, so it wasn't renamed; "
-                        "the build may clash with the original font")
+        warnings.append(
+            f"the PostScript name '{old_ps_name}' doesn't contain the family name, so it wasn't renamed; "
+            "the build may clash with the original font"
+        )
     if old in new or ps_prefix in new_ps:
         return warnings
-    leftovers = sorted({r.nameID for r in name.names if r.nameID in FAMILY_NAME_IDS
-                        and (old in text(r) or ps_prefix in text(r))})
+    leftovers = sorted(
+        {r.nameID for r in name.names if r.nameID in FAMILY_NAME_IDS and (old in text(r) or ps_prefix in text(r))}
+    )
     if leftovers:
         ids = ", ".join(map(str, leftovers))
-        warnings.append(f"some of the font's internal names (name ID {ids}) still contain '{old}'; "
-                        "check the result with --info or a font viewer")
+        warnings.append(
+            f"some of the font's internal names (name ID {ids}) still contain '{old}'; "
+            "check the result with --info or a font viewer"
+        )
     return warnings
 
 
@@ -196,8 +218,7 @@ def set_static_names(font: TTFont, family: str, style: str, weight_class: int, w
     # Windows records only, as before instancing they are the complete set in nearly
     # every font; one without any keeps what it has, or its notices would be lost.
     windows_only = any(r.platformID == 3 for r in name.names)
-    name.names = [r for r in name.names
-                  if r.nameID not in STATIC_NAME_IDS and (r.platformID == 3 or not windows_only)]
+    name.names = [r for r in name.names if r.nameID not in STATIC_NAME_IDS and (r.platformID == 3 or not windows_only)]
     _set(name, legacy_family, 1)
     _set(name, legacy_style, 2)
     if (legacy_family, legacy_style) != (family, style):

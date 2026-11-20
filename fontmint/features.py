@@ -70,8 +70,10 @@ def changed_characters(font: TTFont, tags: list[str]) -> dict[str, list[int]]:
     cmap = {cp: glyph for cp, glyph in (font.getBestCmap() or {}).items() if not _private_use(cp)}
     changed = {}
     for tag in tags:
-        maps = [_one_to_one_map(lookups[i], 1)[0]
-                for i in sorted(_feature_lookups(gsub, tag), key=lambda i: (position[i], i))]
+        maps = [
+            _one_to_one_map(lookups[i], 1)[0]
+            for i in sorted(_feature_lookups(gsub, tag), key=lambda i: (position[i], i))
+        ]
         maps = [mapping for mapping in maps if mapping]
         codepoints = []
         for codepoint, glyph in cmap.items():
@@ -135,10 +137,14 @@ def freeze_features(font: TTFont, spec: dict[str, int] | str, language: str = ""
         if language:
             raise FontmintError(f"font has no {tag} for language '{language}'")
         records = gsub.FeatureList.FeatureRecord
-        if languages := [lang for lang in language_tags(font) if any(
-                records[i].FeatureTag == tag for i in _language_features(gsub, lang))]:
-            raise FontmintError(f"{tag} only has forms for some languages ({', '.join(languages)}); "
-                                "pick one with --language")
+        if languages := [
+            lang
+            for lang in language_tags(font)
+            if any(records[i].FeatureTag == tag for i in _language_features(gsub, lang))
+        ]:
+            raise FontmintError(
+                f"{tag} only has forms for some languages ({', '.join(languages)}); pick one with --language"
+            )
     lookups = gsub.LookupList.Lookup
     position = _run_positions(gsub)
 
@@ -169,8 +175,9 @@ def freeze_features(font: TTFont, spec: dict[str, int] | str, language: str = ""
         return glyph
 
     glyph_ids = font.getReverseGlyphMap()
-    encoded = {g for table in font["cmap"].tables if table.format != 14
-               for cp, g in table.cmap.items() if not _private_use(cp)}
+    encoded = {
+        g for table in font["cmap"].tables if table.format != 14 for cp, g in table.cmap.items() if not _private_use(cp)
+    }
     changed = set()
     done = set()
     for table in font["cmap"].tables:
@@ -224,8 +231,9 @@ def _move_to_calt(gsub, tag: str, indices: set[int], value: int) -> bool:
     any were added."""
     lookups = gsub.LookupList.Lookup
     if value > 1:  # apps would pick the first alternate of any alternate lookup these call
-        indices = {i for i in indices
-                   if not any(kind == 3 for n in _called(lookups, i) for _, kind in _subtables(lookups[n]))}
+        indices = {
+            i for i in indices if not any(kind == 3 for n in _called(lookups, i) for _, kind in _subtables(lookups[n]))
+        }
     records = gsub.FeatureList.FeatureRecord
     targets, staged = set(), set()
     for script in _scripts(gsub):
@@ -272,9 +280,12 @@ def _called(lookups, index: int) -> set[int]:
 def _variation_substitutions(table) -> list:
     """The alternate feature tables that feature variations switch to at some axis values."""
     variations = getattr(table, "FeatureVariations", None)
-    return [sub for variation in getattr(variations, "FeatureVariationRecord", None) or []
-            if variation.FeatureTableSubstitution
-            for sub in variation.FeatureTableSubstitution.SubstitutionRecord]
+    return [
+        sub
+        for variation in getattr(variations, "FeatureVariationRecord", None) or []
+        if variation.FeatureTableSubstitution
+        for sub in variation.FeatureTableSubstitution.SubstitutionRecord
+    ]
 
 
 def disable_features(font: TTFont, tags: list[str]) -> None:
@@ -327,8 +338,13 @@ def _scripts(gsub) -> list:
 
 
 def _language_features(gsub, language: str) -> set[int]:
-    return {i for script in _scripts(gsub) for lang in script.Script.LangSysRecord
-            if lang.LangSysTag.strip() == language for i in lang.LangSys.FeatureIndex}
+    return {
+        i
+        for script in _scripts(gsub)
+        for lang in script.Script.LangSysRecord
+        if lang.LangSysTag.strip() == language
+        for i in lang.LangSys.FeatureIndex
+    }
 
 
 def _subtables(lookup):
@@ -374,7 +390,9 @@ def _run_positions(gsub) -> list[int]:
     position = list(range(len(gsub.LookupList.Lookup)))
     records = gsub.FeatureList.FeatureRecord
     features = [r.Feature for r in records if r.FeatureTag == "rvrn"]
-    features += [sub.Feature for sub in _variation_substitutions(gsub) if records[sub.FeatureIndex].FeatureTag == "rvrn"]
+    features += [
+        sub.Feature for sub in _variation_substitutions(gsub) if records[sub.FeatureIndex].FeatureTag == "rvrn"
+    ]
     for feature in features:
         for index in feature.LookupListIndex:
             position[index] = -1
@@ -418,7 +436,7 @@ def _repair(lookups, position: list[int], changes_after, encoded: set[str], glyp
             continue
         pairs = {old: new for old, new in frozen.items() if new not in encoded}
         for subtable, kind in _subtables(lookup):
-            outputs_changed += _bake_outputs(subtable, kind, lambda glyph: frozen.get(glyph, glyph))
+            outputs_changed += _bake_outputs(subtable, kind, frozen)
             if not pairs:
                 continue
             if kind in (1, 2, 3):
@@ -435,13 +453,13 @@ def _repair(lookups, position: list[int], changes_after, encoded: set[str], glyp
     return outputs_changed
 
 
-def _bake_outputs(subtable, kind: int, frozen) -> int:
+def _bake_outputs(subtable, kind: int, frozen: dict[str, str]) -> int:
     """Pass a lookup's output glyphs through `frozen`; returns how many changed."""
     changed = 0
 
     def bake(glyph: str) -> str:
         nonlocal changed
-        new = frozen(glyph)
+        new = frozen.get(glyph, glyph)
         changed += new != glyph
         return new
 
@@ -504,10 +522,11 @@ def _repair_glyph_rules(subtable, kind: int, pairs: dict[str, str], glyph_ids) -
     mentions an old glyph, with the frozen glyph, right after the original rule so
     the rules keep their priority."""
     set_attr, rule_attr, parts = (
-        ("SubRuleSet", "SubRule", ("Input",)) if kind == 5
+        ("SubRuleSet", "SubRule", ("Input",))
+        if kind == 5
         else ("ChainSubRuleSet", "ChainSubRule", ("Backtrack", "Input", "LookAhead"))
     )
-    rule_sets = dict(zip(subtable.Coverage.glyphs, getattr(subtable, set_attr)))
+    rule_sets = dict(zip(subtable.Coverage.glyphs, getattr(subtable, set_attr), strict=False))
     copies: dict[str, list] = {}
     for first, rule_set in rule_sets.items():
         rules = (getattr(rule_set, rule_attr, None) or []) if rule_set else []
@@ -562,7 +581,7 @@ def _repair_class_and_coverage_rules(subtable, pairs: dict[str, str], glyph_ids)
 def _repair_reverse_rules(subtable, pairs: dict[str, str], glyph_ids) -> None:
     """Reverse chaining rules (type 8) pair each input glyph with its substitute:
     the frozen glyph gets the old one's substitute, and joins the context coverages."""
-    substitutes = dict(zip(subtable.Coverage.glyphs, subtable.Substitute))
+    substitutes = dict(zip(subtable.Coverage.glyphs, subtable.Substitute, strict=False))
     for old, new in pairs.items():
         if old in substitutes and new not in substitutes:
             substitutes[new] = substitutes[old]
@@ -576,8 +595,12 @@ def _repair_reverse_rules(subtable, pairs: dict[str, str], glyph_ids) -> None:
 def _nested_lookups(subtable) -> set[int]:
     """Lookup indices a context subtable calls."""
     records = list(getattr(subtable, "SubstLookupRecord", None) or [])  # format 3
-    for set_attr, rule_attr in (("SubRuleSet", "SubRule"), ("ChainSubRuleSet", "ChainSubRule"),
-                                ("SubClassSet", "SubClassRule"), ("ChainSubClassSet", "ChainSubClassRule")):
+    for set_attr, rule_attr in (
+        ("SubRuleSet", "SubRule"),
+        ("ChainSubRuleSet", "ChainSubRule"),
+        ("SubClassSet", "SubClassRule"),
+        ("ChainSubClassSet", "ChainSubClassRule"),
+    ):
         for rule_set in getattr(subtable, set_attr, None) or []:
             for rule in (getattr(rule_set, rule_attr, None) or []) if rule_set else []:
                 records += rule.SubstLookupRecord or []

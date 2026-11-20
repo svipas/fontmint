@@ -66,7 +66,8 @@ class StaticInputTest(unittest.TestCase):
         cs_src = src["CFF "].cff.topDictIndex[0].CharStrings
         cs_out = out["CFF "].cff.topDictIndex[0].CharStrings
         for g in src.getGlyphOrder():
-            cs_src[g].decompile(); cs_out[g].decompile()
+            cs_src[g].decompile()
+            cs_out[g].decompile()
             self.assertEqual(cs_src[g].program, cs_out[g].program, g)
         self.assertEqual(out["CFF "].cff.fontNames, ["MintSans-Regular"])
 
@@ -110,18 +111,21 @@ class VariableDefaultTest(unittest.TestCase):
         cls.files = mint(fx.variable_ttf(), Options(features="ss01", name="Mint Sans"))
 
     def test_layout(self):
-        self.assertEqual(folders(self.files),
-                         {"variable", "ttf-unhinted", "ttf-hinted", "otf", "woff2-unhinted", "woff2-hinted"})
+        self.assertEqual(
+            folders(self.files), {"variable", "ttf-unhinted", "ttf-hinted", "otf", "woff2-unhinted", "woff2-hinted"}
+        )
         styles = sorted(p.split("/")[-1] for p in self.files if "/otf/" in p)
-        self.assertEqual(styles, ["MintSans-Bold.otf", "MintSans-Condensed.otf",
-                                  "MintSans-CondensedBold.otf", "MintSans-Regular.otf"])
+        self.assertEqual(
+            styles,
+            ["MintSans-Bold.otf", "MintSans-Condensed.otf", "MintSans-CondensedBold.otf", "MintSans-Regular.otf"],
+        )
         self.assertEqual(len(self.files), 2 + 4 * 5)
 
     def test_variable_output_is_only_frozen_and_renamed(self):
         vf = fx.open_font(self.files["MintSans/variable/MintSans[wght,wdth].ttf"])
         self.assertIn("fvar", vf)
         self.assertNotIn("fpgm", vf)  # never hinted
-        self.assertIn("glyf", vf)     # never converted
+        self.assertIn("glyf", vf)  # never converted
         self.assertEqual(vf.getBestCmap()[ord("0")], "zero.ss01")
         self.assertEqual(vf["name"].getDebugName(1), "Mint Sans")
         self.assertEqual(vf["name"].getDebugName(0), fx.COPYRIGHT)
@@ -166,8 +170,14 @@ class HintedVariableSourceTest(unittest.TestCase):
         for folder, ext in (("ttf-unhinted", "ttf"), ("woff2-unhinted", "woff2")):
             font = fx.open_font(self.files[f"MintSans/{folder}/MintSans-Bold.{ext}"])
             self.assertFalse(any(t in font for t in ("fpgm", "prep", "cvt ", "gasp")), folder)
-            self.assertFalse(any(font["glyf"][g].program.getBytecode() for g in font.getGlyphOrder()
-                                 if hasattr(font["glyf"][g], "program")), folder)
+            self.assertFalse(
+                any(
+                    font["glyf"][g].program.getBytecode()
+                    for g in font.getGlyphOrder()
+                    if hasattr(font["glyf"][g], "program")
+                ),
+                folder,
+            )
 
     def test_hinted_outputs_keep_the_designers_hinting(self):
         font = fx.open_font(self.files["MintSans/ttf-hinted/MintSans-Bold.ttf"])
@@ -251,7 +261,9 @@ class NewOptionsTest(unittest.TestCase):
 
     def test_axis_dependent_swaps_survive(self):
         # at wght 900 the font shows O for '0' (rvrn runs first); with ss01 on, a text engine still shows O there
-        variable = mint(fx.axis_swap_variable_ttf(), Options(name="Mint Sans", features="ss01", formats="ttf", hint=False))
+        variable = mint(
+            fx.axis_swap_variable_ttf(), Options(name="Mint Sans", features="ss01", formats="ttf", hint=False)
+        )
         vf = fx.open_font(variable["MintSans/variable/MintSans[wght,wdth].ttf"])
         gsub = vf["GSUB"].table
         swap = gsub.FeatureVariations.FeatureVariationRecord[0].FeatureTableSubstitution.SubstitutionRecord[0]
@@ -272,14 +284,16 @@ class NewOptionsTest(unittest.TestCase):
 
     def test_font_without_a_weight_axis_keeps_its_weight(self):
         font = fx.open_font(fx.variable_ttf())
-        font["gvar"].variations = {glyph: [v for v in variations if "wght" not in v.axes]
-                                   for glyph, variations in font["gvar"].variations.items()}
+        font["gvar"].variations = {
+            glyph: [v for v in variations if "wght" not in v.axes]
+            for glyph, variations in font["gvar"].variations.items()
+        }
         font["fvar"].axes = [axis for axis in font["fvar"].axes if axis.axisTag == "wdth"]
         for instance in font["fvar"].instances:
             del instance.coordinates["wght"]
         font["OS/2"].usWeightClass = 700
         files = mint(fx._save(font), Options(name="Mint Sans", axes={"wdth": "75"}, formats="ttf", hint=False))
-        (path, data), = files.items()
+        ((path, data),) = files.items()
         self.assertEqual(path, "MintSans/ttf-unhinted/MintSans-CondensedBold.ttf")
         self.assertEqual(fx.open_font(data)["OS/2"].usWeightClass, 700)
 
@@ -311,10 +325,13 @@ class NewOptionsTest(unittest.TestCase):
         self.assertTrue(any("ss03: only the one-to-one swaps were frozen" in w for w in p.warnings))
         font = fx.open_font(fx.static_ttf())
         del font["GSUB"]
-        addOpenTypeFeaturesFromString(font, "feature liga { sub I O by H; } liga; feature ss03 { sub I' zero by I.ss01; } ss03;")
+        addOpenTypeFeaturesFromString(
+            font, "feature liga { sub I O by H; } liga; feature ss03 { sub I' zero by I.ss01; } ss03;"
+        )
         p = prepare(fx._save(font), Options(name="Mint Sans", features="ss03"))
-        self.assertTrue(any("ss03: rules that can't be frozen" in w and "ligatures turned off" in w
-                            for w in p.warnings), p.warnings)
+        self.assertTrue(
+            any("ss03: rules that can't be frozen" in w and "ligatures turned off" in w for w in p.warnings), p.warnings
+        )
 
     def test_disabling_text_features_warns(self):
         p = prepare(fx.static_ttf(), Options(name="Mint Sans", disable="liga"))
@@ -354,10 +371,16 @@ class AutohintFailureTest(unittest.TestCase):
 class VariableItalicTest(unittest.TestCase):
     def test_italic_names(self):
         files = mint(fx.variable_ttf(italic=True), Options(name="Mint Sans", formats={"ttf"}, hint=False))
-        self.assertEqual(sorted(p.split("/")[-1] for p in files), [
-            "MintSans-BoldItalic.ttf", "MintSans-CondensedBoldItalic.ttf", "MintSans-CondensedItalic.ttf",
-            "MintSans-Italic.ttf", "MintSans-Italic[wght,wdth].ttf",
-        ])
+        self.assertEqual(
+            sorted(p.split("/")[-1] for p in files),
+            [
+                "MintSans-BoldItalic.ttf",
+                "MintSans-CondensedBoldItalic.ttf",
+                "MintSans-CondensedItalic.ttf",
+                "MintSans-Italic.ttf",
+                "MintSans-Italic[wght,wdth].ttf",
+            ],
+        )
         italic = fx.open_font(files["MintSans/ttf-unhinted/MintSans-Italic.ttf"])
         self.assertEqual(italic["name"].getDebugName(2), "Italic")
         self.assertTrue(italic["OS/2"].fsSelection & 1)
@@ -371,8 +394,10 @@ class VariableItalicTest(unittest.TestCase):
         self.assertEqual(top.UnderlinePosition, otf["post"].underlinePosition)
 
     def test_style_name_on_italic(self):
-        files = mint(fx.variable_ttf(italic=True),
-                     Options(name="Mint Sans", axes={"wght": "375"}, style_name="Regular", formats={"ttf"}, hint=False))
+        files = mint(
+            fx.variable_ttf(italic=True),
+            Options(name="Mint Sans", axes={"wght": "375"}, style_name="Regular", formats={"ttf"}, hint=False),
+        )
         self.assertEqual(list(files), ["MintSans/ttf-unhinted/MintSans-Italic.ttf"])
 
 
@@ -386,8 +411,10 @@ class AxisOptionsTest(unittest.TestCase):
     def test_values_are_static_only(self):
         files = self.build(axes={"wght": "400,700", "wdth": "75,100"})
         self.assertNotIn("variable", folders(files))
-        self.assertEqual(sorted(p.split("/")[-1] for p in files), [
-            "MintSans-Bold.ttf", "MintSans-Condensed.ttf", "MintSans-CondensedBold.ttf", "MintSans-Regular.ttf"])
+        self.assertEqual(
+            sorted(p.split("/")[-1] for p in files),
+            ["MintSans-Bold.ttf", "MintSans-Condensed.ttf", "MintSans-CondensedBold.ttf", "MintSans-Regular.ttf"],
+        )
 
     def test_custom_weight(self):
         files = self.build(axes={"wght": "375"})
@@ -407,8 +434,13 @@ class AxisOptionsTest(unittest.TestCase):
 
     def test_range_makes_custom_range_variable_font(self):
         files = self.build(axes={"wght": "300:700"}, formats={"ttf", "woff2"})
-        self.assertEqual(sorted(files), ["MintSans/variable/MintSans-wght300-700[wght,wdth].ttf",
-                                         "MintSans/variable/MintSans-wght300-700[wght,wdth].woff2"])
+        self.assertEqual(
+            sorted(files),
+            [
+                "MintSans/variable/MintSans-wght300-700[wght,wdth].ttf",
+                "MintSans/variable/MintSans-wght300-700[wght,wdth].woff2",
+            ],
+        )
         axes = {a.axisTag: (a.minValue, a.maxValue) for a in fx.open_font(next(iter(files.values())))["fvar"].axes}
         self.assertEqual(axes, {"wght": (300, 700), "wdth": (75, 100)})  # unmentioned axis keeps full range
 
@@ -420,13 +452,16 @@ class AxisOptionsTest(unittest.TestCase):
 
     def test_mixed_values_and_ranges(self):
         files = self.build(axes={"wght": "400,300:700"})
-        self.assertEqual(sorted(files), ["MintSans/ttf-unhinted/MintSans-Regular.ttf",
-                                         "MintSans/variable/MintSans-wght300-700[wght,wdth].ttf"])
+        self.assertEqual(
+            sorted(files),
+            ["MintSans/ttf-unhinted/MintSans-Regular.ttf", "MintSans/variable/MintSans-wght300-700[wght,wdth].ttf"],
+        )
 
     def test_formats_subset(self):
         self.assertEqual(folders(self.build(axes={"wght": "400"}, formats={"otf"})), {"otf"})
-        self.assertEqual(folders(self.build(axes={"wght": "400"}, formats={"woff2"}, hint=True)),
-                         {"woff2-unhinted", "woff2-hinted"})
+        self.assertEqual(
+            folders(self.build(axes={"wght": "400"}, formats={"woff2"}, hint=True)), {"woff2-unhinted", "woff2-hinted"}
+        )
 
     def test_range_with_only_otf_is_reported(self):
         """Variable fonts are written as TTF/WOFF2 only - asking for a range in OTF
@@ -440,10 +475,14 @@ class AxisOptionsTest(unittest.TestCase):
         self.assertTrue(any("variable font is skipped" in w for w in p.warnings))
 
     def test_no_static_builds_only_variable_fonts(self):
-        self.assertEqual(sorted(self.build(static=False, formats={"ttf", "woff2"})),
-                         ["MintSans/variable/MintSans[wght,wdth].ttf", "MintSans/variable/MintSans[wght,wdth].woff2"])
-        self.assertEqual(list(self.build(static=False, axes={"wght": "300:700"})),
-                         ["MintSans/variable/MintSans-wght300-700[wght,wdth].ttf"])
+        self.assertEqual(
+            sorted(self.build(static=False, formats={"ttf", "woff2"})),
+            ["MintSans/variable/MintSans[wght,wdth].ttf", "MintSans/variable/MintSans[wght,wdth].woff2"],
+        )
+        self.assertEqual(
+            list(self.build(static=False, axes={"wght": "300:700"})),
+            ["MintSans/variable/MintSans-wght300-700[wght,wdth].ttf"],
+        )
 
     def test_no_static_rejects_what_needs_static_fonts(self):
         with self.assertRaisesRegex(FontmintError, "--no-static"):
@@ -466,7 +505,7 @@ class AxisOptionsTest(unittest.TestCase):
         font = fx.open_font(next(iter(files.values())))
         self.assertEqual(font["name"].getDebugName(1), "Mint Sans")
         with self.assertRaisesRegex(FontmintError, "may only use"):
-            self.build(name='Mint:Sans*', axes={"wght": "400"})
+            self.build(name="Mint:Sans*", axes={"wght": "400"})
 
     def test_original_name_warns(self):
         p = prepare(fx.variable_ttf(), Options(name="Test Sans"))
@@ -476,8 +515,17 @@ class AxisOptionsTest(unittest.TestCase):
         self.assertTrue(self.build(features=None, axes={"wght": "400"}))
 
     def test_options_accept_strings_and_lists(self):
-        files = mint(fx.variable_ttf(), Options(name="Mint Sans", features=["ss01"], subset=["latin", "U+2190"],
-                                                axes={"wght": "400"}, formats="ttf", hint=False))
+        files = mint(
+            fx.variable_ttf(),
+            Options(
+                name="Mint Sans",
+                features=["ss01"],
+                subset=["latin", "U+2190"],
+                axes={"wght": "400"},
+                formats="ttf",
+                hint=False,
+            ),
+        )
         self.assertEqual(fx.open_font(next(iter(files.values()))).getBestCmap()[ord("0")], "zero.ss01")
 
     def test_unfreezable_feature_warns(self):

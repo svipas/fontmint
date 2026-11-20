@@ -61,7 +61,7 @@ def fixed_width(font: TTFont) -> int:
     glyphs (e.g. an ffi ligature, or CJK next to Latin) aside."""
     hmtx = font["hmtx"]
     widths = Counter(hmtx[glyph][0] for glyph in set((font.getBestCmap() or {}).values()))
-    common = max(widths, key=widths.get, default=0)
+    common = max(widths, key=widths.__getitem__, default=0)
     return common if set(widths) <= {0, common, 2 * common} else 0
 
 
@@ -116,8 +116,9 @@ def _sync_cff_widths(font: TTFont) -> None:
         for name in top.CharStrings.keys():
             charstring = top.CharStrings[name]
             private = charstring.private  # CID-keyed fonts have one per font dict
-            reader = _WidthReader(getattr(private, "Subrs", []), top.GlobalSubrs, private.nominalWidthX,
-                                  private.defaultWidthX)
+            reader = _WidthReader(
+                getattr(private, "Subrs", []), top.GlobalSubrs, private.nominalWidthX, private.defaultWidthX
+            )
             reader.execute(charstring)
             if reader.width != hmtx[name][0]:
                 yield charstring, reader.explicit, hmtx[name][0] - private.nominalWidthX

@@ -96,11 +96,7 @@ def _without_style(family: str, ps_name: str) -> str:
 
 
 def is_italic(font: TTFont) -> bool:
-    return (
-        font["post"].italicAngle != 0
-        or bool(font["OS/2"].fsSelection & 1)
-        or bool(font["head"].macStyle & 2)
-    )
+    return font["post"].italicAngle != 0 or bool(font["OS/2"].fsSelection & 1) or bool(font["head"].macStyle & 2)
 
 
 def is_variable(font: TTFont) -> bool:

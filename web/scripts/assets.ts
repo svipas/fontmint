@@ -1,8 +1,7 @@
 // Puts everything the worker loads at runtime into public/: the Pyodide core and the
 // packages fontmint needs, the pinned fontTools wheel and a freshly built fontmint
 // wheel. The site serves these itself; no CDN or PyPI request happens in the browser.
-import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 const PYODIDE = "314.0.8";
@@ -92,17 +91,7 @@ await Bun.write(
   join(pub, "wheels", FONTTOOLS.file),
   await download(FONTTOOLS.url, FONTTOOLS.sha256, join(cache, FONTTOOLS.file)),
 );
-const venvPython = join(repo, ".venv", "bin", "python");
-const python = (await Bun.file(venvPython).exists()) ? venvPython : "python3";
-// Built from a copy, so setuptools' build/ and *.egg-info folders don't land in the repo.
-const source = await mkdtemp(join(tmpdir(), "fontmint-wheel-"));
-try {
-  for (const path of ["pyproject.toml", "README.md", "LICENSE", "fontmint"])
-    await cp(join(repo, path), join(source, path), { recursive: true, filter: (p) => !p.includes("__pycache__") });
-  await run([python, "-m", "pip", "wheel", "--quiet", "--no-deps", "--wheel-dir", join(pub, "wheels"), source], source);
-} finally {
-  await rm(source, { recursive: true, force: true });
-}
+await run(["uv", "build", "--quiet", "--wheel", "--no-create-gitignore", "--out-dir", join(pub, "wheels")], repo);
 const fontmintWheel = [...new Bun.Glob("fontmint-*.whl").scanSync(join(pub, "wheels"))][0];
 if (!fontmintWheel) throw new Error("the fontmint wheel wasn't built");
 

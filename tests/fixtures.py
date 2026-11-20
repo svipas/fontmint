@@ -22,8 +22,7 @@ from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.t2CharStringPen import T2CharStringPen
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont, newTable
-from fontTools.ttLib.tables import ttProgram
-from fontTools.ttLib.tables import _c_m_a_p
+from fontTools.ttLib.tables import _c_m_a_p, ttProgram
 from fontTools.ttLib.tables.TupleVariation import TupleVariation
 from fontTools.varLib.featureVars import addFeatureVariations
 
@@ -35,11 +34,17 @@ ITALIC_ANGLE = -10
 
 # glyph → (x0, y0, x1, y1) of its rectangle; None for an empty glyph
 LATIN = {
-    ".notdef": (50, 0, 450, 700), "space": None,
-    "zero": (60, 0, 440, 700), "zero.ss01": (60, -20, 440, 720),
-    "I": (200, 0, 300, 700), "I.ss01": (150, 0, 350, 700),
-    "H": (60, 0, 540, 700), "O": (50, -10, 550, 710), "o": (50, -10, 450, 510),
-    "x": (30, 0, 470, 500), "n": (60, 0, 440, 500),
+    ".notdef": (50, 0, 450, 700),
+    "space": None,
+    "zero": (60, 0, 440, 700),
+    "zero.ss01": (60, -20, 440, 720),
+    "I": (200, 0, 300, 700),
+    "I.ss01": (150, 0, 350, 700),
+    "H": (60, 0, 540, 700),
+    "O": (50, -10, 550, 710),
+    "o": (50, -10, 450, 510),
+    "x": (30, 0, 470, 500),
+    "n": (60, 0, 440, 500),
 }
 LATIN_CMAP = {0x20: "space", 0x30: "zero", 0x49: "I", 0x48: "H", 0x4F: "O", 0x6F: "o", 0x78: "x", 0x6E: "n"}
 LATIN_FEATURES = """
@@ -51,8 +56,10 @@ SYMBOLS = {".notdef": (50, 0, 450, 700), "arrowleft": (50, 200, 550, 400), "arro
 SYMBOLS_CMAP = {0x2190: "arrowleft", 0x2192: "arrowright"}
 
 INSTANCES = [  # (style name, wght, wdth)
-    ("Regular", 400, 100), ("Bold", 700, 100),
-    ("Condensed", 400, 75), ("Condensed Bold", 700, 75),
+    ("Regular", 400, 100),
+    ("Bold", 700, 100),
+    ("Condensed", 400, 75),
+    ("Condensed Bold", 700, 75),
 ]
 # Dummy TrueType hinting: must survive static passthrough byte for byte, and be
 # stripped from the "-unhinted" outputs of a hinted variable font.
@@ -71,8 +78,9 @@ def _draw_rect(pen, box) -> None:
         pen.closePath()
 
 
-def _builder(is_ttf: bool, boxes: dict, cmap: dict, features: str, italic: bool, hinted: bool,
-             scan_control: bool = False) -> FontBuilder:
+def _builder(
+    is_ttf: bool, boxes: dict, cmap: dict, features: str, italic: bool, hinted: bool, scan_control: bool = False
+) -> FontBuilder:
     style = "Italic" if italic else "Regular"
     fb = FontBuilder(1000, isTTF=is_ttf)
     fb.setupGlyphOrder(list(boxes))
@@ -97,17 +105,19 @@ def _builder(is_ttf: bool, boxes: dict, cmap: dict, features: str, italic: bool,
         fb.setupCFF(f"TestSans-{style}", {"FullName": f"{FAMILY} {style}", "FamilyName": FAMILY}, charstrings, {})
     fb.setupHorizontalMetrics(metrics)
     fb.setupHorizontalHeader(ascent=800, descent=-200)
-    fb.setupNameTable({
-        "copyright": COPYRIGHT,
-        "familyName": FAMILY,
-        "styleName": style,
-        "uniqueFontIdentifier": f"1.000;TEST;TestSans-{style}",
-        "fullName": f"{FAMILY} {style}",
-        "version": "Version 1.000",
-        "psName": f"TestSans-{style}",
-        "trademark": TRADEMARK,
-        "licenseDescription": "Test Sans is licensed for testing only.",
-    })
+    fb.setupNameTable(
+        {
+            "copyright": COPYRIGHT,
+            "familyName": FAMILY,
+            "styleName": style,
+            "uniqueFontIdentifier": f"1.000;TEST;TestSans-{style}",
+            "fullName": f"{FAMILY} {style}",
+            "version": "Version 1.000",
+            "psName": f"TestSans-{style}",
+            "trademark": TRADEMARK,
+            "licenseDescription": "Test Sans is licensed for testing only.",
+        }
+    )
     fb.setupOS2(sTypoAscender=800, sTypoDescender=-200, usWinAscent=800, usWinDescent=200)
     fb.setupPost()
     if features:
@@ -135,22 +145,24 @@ def _add_variations(fb: FontBuilder, boxes: dict, italic: bool) -> None:
     fb.setupFvar(
         axes=[("wght", 100, 400, 900, "Weight"), ("wdth", 75, 100, 100, "Width")],
         instances=[
-            {"location": {"wght": w, "wdth": d}, "stylename": _italic_name(s) if italic else s}
-            for s, w, d in INSTANCES
+            {"location": {"wght": w, "wdth": d}, "stylename": _italic_name(s) if italic else s} for s, w, d in INSTANCES
         ],
     )
 
     def deltas(dx):  # 4 rectangle points + 4 phantom points; move the right edge and advance
         return [(0, 0), (0, 0), (dx, 0), (dx, 0), (0, 0), (dx, 0), (0, 0), (0, 0)]
 
-    fb.setupGvar({
-        name: [
-            TupleVariation({"wght": (0, 1, 1)}, deltas(80)),
-            TupleVariation({"wght": (-1, -1, 0)}, deltas(-40)),
-            TupleVariation({"wdth": (-1, -1, 0)}, deltas(-100)),
-        ]
-        for name, box in boxes.items() if box
-    })
+    fb.setupGvar(
+        {
+            name: [
+                TupleVariation({"wght": (0, 1, 1)}, deltas(80)),
+                TupleVariation({"wght": (-1, -1, 0)}, deltas(-40)),
+                TupleVariation({"wdth": (-1, -1, 0)}, deltas(-100)),
+            ]
+            for name, box in boxes.items()
+            if box
+        }
+    )
 
 
 def _italic_name(style: str) -> str:

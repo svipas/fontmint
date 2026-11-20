@@ -3,9 +3,9 @@
 ## Running
 
 ```bash
-.venv/bin/python -m unittest                 # everything, ~2 s
-.venv/bin/python -m unittest -v tests.test_core
-.venv/bin/python -m unittest tests.test_core.AxisOptionsTest.test_style_name
+uv run python -m unittest  # everything, ~2 s
+uv run python -m unittest -v tests.test_core
+uv run python -m unittest tests.test_core.AxisOptionsTest.test_style_name
 ```
 
 Only the standard library's `unittest` is used - don't add pytest or other test dependencies.
@@ -61,13 +61,13 @@ for rel in files:
             print(rel, tag)
 ```
 
-No output means identical fonts. To keep the old code runnable, copy the `fontmint/` package to a temporary folder and run `python -m fontmint` from there (the current directory wins over the editable install).
+No output means identical fonts. To keep the old code runnable, copy the `fontmint/` package to a temporary folder and run `uv run --project /path/to/fontmint python -m fontmint` from there (the current directory wins over the editable install).
 
 ## Real fonts (optional smoke test)
 
 The synthetic fixtures don't exercise real-world complexity (composites, hundreds of lookups, overlaps). Before a release, run a real family, e.g. Inter 4.x:
 
 ```bash
-.venv/bin/fontmint InterVariable*.ttf --features ss02 --name "Inter Clear" --output /tmp/inter-check
+uv run fontmint InterVariable*.ttf --features ss02 --name "Inter Clear" --output /tmp/inter-check
 # expect 94 files; static fonts: '0' maps to zero.slash, copyright unchanged
 ```

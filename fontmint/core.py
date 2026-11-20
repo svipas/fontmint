@@ -23,7 +23,9 @@ Variable fonts produce:
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import cast
 
 from fontTools.ttLib import TTFont
 from fontTools.varLib.instancer import instantiateVariableFont
@@ -68,7 +70,6 @@ from .naming import (
 )
 from .subset import parse_subset, subset_font
 
-
 # Features many scripts need to show text correctly; turning them off gets a warning.
 TEXT_FEATURES = {"ccmp", "locl", "mark", "mkmk", "rlig", "init", "medi", "fina", "isol", "rclt", "abvm", "blwm"}
 
@@ -109,7 +110,7 @@ class Options:
     letter_spacing: float = 0
     subset: str | list[str] = ""
     name: str = ""
-    axes: dict[str, object] = field(default_factory=dict)
+    axes: Mapping[str, object] = field(default_factory=dict)
     style_name: str = ""
     formats: str | set[str] | None = None
     static: bool = True
@@ -134,19 +135,23 @@ class Options:
 
     def validate(self) -> None:
         if self.subset:
-            parse_subset(self.subset)
+            parse_subset(cast(str, self.subset))
         low, high = LINE_HEIGHT_RANGE
         if self.line_height is not None and not low <= self.line_height <= high:
-            raise FontmintError(f"--line-height {self.line_height:g} is out of range; use a multiple of the font "
-                                f"size between {low:g} and {high:g}, e.g. 1.4")
+            raise FontmintError(
+                f"--line-height {self.line_height:g} is out of range; use a multiple of the font "
+                f"size between {low:g} and {high:g}, e.g. 1.4"
+            )
         low, high = LETTER_SPACING_RANGE
         if not low <= self.letter_spacing <= high:
-            raise FontmintError(f"--letter-spacing {self.letter_spacing:g} is out of range; use a fraction of the "
-                                f"font size between {low:g} and {high:g}, e.g. 0.05")
+            raise FontmintError(
+                f"--letter-spacing {self.letter_spacing:g} is out of range; use a fraction of the "
+                f"font size between {low:g} and {high:g}, e.g. 0.05"
+            )
         if self.language:
             if not 1 <= len(self.language) <= 4:
                 raise FontmintError(f"'{self.language}' isn't a language tag; tags have 1-4 letters, e.g. ROM, SRB")
-            if not parse_features(self.features):
+            if not parse_features(cast(str, self.features)):
                 raise FontmintError("--language picks which forms to freeze; add the feature, e.g. --features locl")
         if self.name:
             check_name(self.name, "--name")
@@ -163,14 +168,14 @@ class Options:
 class FontInfo:
     family: str
     variable: bool
-    axes: list[tuple[str, float, float, float]]           # (tag, min, default, max)
-    instances: list[tuple[str, dict[str, float]]]          # (style name, coordinates)
-    features: list[str]                                    # substitution (GSUB) feature tags
+    axes: list[tuple[str, float, float, float]]  # (tag, min, default, max)
+    instances: list[tuple[str, dict[str, float]]]  # (style name, coordinates)
+    features: list[str]  # substitution (GSUB) feature tags
     italic: bool
     positioning: list[str] = field(default_factory=list)  # positioning (GPOS) feature tags, e.g. kern
     feature_names: dict[str, str] = field(default_factory=dict)  # e.g. {"ss02": "Disambiguation"}
     languages: list[str] = field(default_factory=list)  # languages with their own forms, e.g. ["ROM", "SRB"]
-    line_height: float = 0.0                               # line spacing as a multiple of the font size
+    line_height: float = 0.0  # line spacing as a multiple of the font size
 
 
 @dataclass
@@ -182,11 +187,11 @@ class Job:
     vf_bytes: bytes
     family: str
     stem: str
-    location: dict[str, float | tuple[float, float]]
+    location: Mapping[str, float | tuple[float, float]]
     style: str = ""
     weight_class: int = 400
     width_class: int | None = None
-    letter_spacing: float = 0                  # added after instancing, where each glyph's final width is known
+    letter_spacing: float = 0  # added after instancing, where each glyph's final width is known
     formats: set[str] = field(default_factory=lambda: set(FORMATS))
     hint: bool = True
     remove_overlaps: bool = True
@@ -202,7 +207,7 @@ class Prepared:
     """A frozen + renamed font: files that are ready now, and jobs still to run."""
 
     family: str
-    frozen: int                        # characters remapped by features
+    frozen: int  # characters remapped by features
     warnings: list[str]
     files: dict[str, bytes]
     jobs: list[Job]
@@ -218,20 +223,32 @@ def inspect(font_bytes: bytes) -> FontInfo:
     font = load(font_bytes)
     variable = is_variable(font)
     axes = [(a.axisTag, a.minValue, a.defaultValue, a.maxValue) for a in font["fvar"].axes] if variable else []
-    instances = []
-    if variable:
-        for inst in font["fvar"].instances:
-            instances.append((get_name(font, inst.subfamilyNameID) or "?", dict(inst.coordinates)))
-    return FontInfo(family_name(font), variable, axes, instances, list_features(font), is_italic(font),
-                    list_features(font, "GPOS"), feature_names(font), language_tags(font),
-                    line_height(font))
+    instances = (
+        [(get_name(font, i.subfamilyNameID) or "?", dict(i.coordinates)) for i in font["fvar"].instances]
+        if variable
+        else []
+    )
+    return FontInfo(
+        family_name(font),
+        variable,
+        axes,
+        instances,
+        list_features(font),
+        is_italic(font),
+        list_features(font, "GPOS"),
+        feature_names(font),
+        language_tags(font),
+        line_height(font),
+    )
 
 
 def prepare(font_bytes: bytes, options: Options) -> Prepared:
     """Apply the options to one font, and plan everything to build from it."""
     options.validate()
-    spec = parse_features(options.features)
-    disable = parse_tags(options.disable)
+    # __post_init__ turned these into text
+    features, disable_text, subset_text = (cast(str, t) for t in (options.features, options.disable, options.subset))
+    spec = parse_features(features)
+    disable = parse_tags(disable_text)
     if both := sorted(set(spec) & set(disable)):
         raise FontmintError(f"{', '.join(both)} can't be frozen and disabled at the same time")
     font = load(font_bytes, recalc=False)
@@ -242,31 +259,37 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
     if disable:
         disable_features(font, disable)
         if needed := [t for t in disable if t in TEXT_FEATURES]:
-            warnings.append(f"turning off {', '.join(needed)} can break text: these features place accents or "
-                            "join and shape letters in many scripts")
+            warnings.append(
+                f"turning off {', '.join(needed)} can break text: these features place accents or "
+                "join and shape letters in many scripts"
+            )
     if options.name:
         if options.name in (old_family, old_family.removesuffix(" Variable")):
             warnings.append("--name is the original family name; the build will clash with the original font")
         warnings += rename_family(font, old_family, options.name)
         check_ps_length(get_name(font, 6) or "")
     elif variable or spec or disable or options.line_height is not None or options.letter_spacing or options.subset:
-        warnings.append("no --name given; the output keeps the original family name and will clash with the "
-                        "original font (add --name to avoid this)")
+        warnings.append(
+            "no --name given; the output keeps the original family name and will clash with the "
+            "original font (add --name to avoid this)"
+        )
 
     frozen = 0
     if spec:
         result = freeze_features(font, spec, options.language)
         frozen = result.remapped
-        warnings += _freeze_warnings(options.features, result)
+        warnings += _freeze_warnings(features, result)
 
     if options.line_height is not None:
         set_line_height(font, options.line_height)
     subset = None
-    if options.subset:
-        *subset, dropped = subset_font(font, parse_subset(options.subset))
+    if subset_text:
+        kept, before, dropped = subset_font(font, parse_subset(subset_text))
+        subset = (kept, before)
         if dropped:
-            warnings.append(f"subsetting dropped the tables {', '.join(dropped)}: they can't be subset, or nothing "
-                            "was left in them")
+            warnings.append(
+                f"subsetting dropped the tables {', '.join(dropped)}: they can't be subset, or nothing was left in them"
+            )
     if "DSIG" in font:  # a digital signature, no longer valid for the changed font
         del font["DSIG"]
 
@@ -274,27 +297,35 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
         prepared = _prepare_variable_input(font, options, old_family, frozen, warnings)
     else:
         prepared = _prepare_static_input(font, options, old_family, frozen, warnings)
-    prepared.subset = tuple(subset) if subset else None
+    prepared.subset = subset
     return prepared
 
 
 def _freeze_warnings(features: str, result: FreezeResult) -> list[str]:
     warnings = []
     if result.moved:
-        warnings.append(f"{', '.join(result.moved)}: rules that can't be frozen (e.g. ligatures, or swaps that depend "
-                        "on neighboring characters) were added to the font's default features, so they work in most "
-                        "apps - but not in editors and terminals with ligatures turned off")
+        warnings.append(
+            f"{', '.join(result.moved)}: rules that can't be frozen (e.g. ligatures, or swaps that depend "
+            "on neighboring characters) were added to the font's default features, so they work in most "
+            "apps - but not in editors and terminals with ligatures turned off"
+        )
     not_moved = [tag for tag in result.partial if tag not in result.moved]
     if result.remapped == 0 and result.outputs_changed == 0 and not result.moved:
-        warnings.append(f"'{features}' changed nothing: it only changes ligatures, or glyphs that depend on "
-                        "neighboring characters, which can't be frozen (they can be turned off with --disable)")
+        warnings.append(
+            f"'{features}' changed nothing: it only changes ligatures, or glyphs that depend on "
+            "neighboring characters, which can't be frozen (they can be turned off with --disable)"
+        )
     elif not_moved:
-        warnings.append(f"{', '.join(not_moved)}: only the one-to-one swaps were frozen; the feature's other rules "
-                        "(e.g. for accented letters, ligatures, or swaps that depend on neighboring characters) "
-                        "can't be frozen, so some characters keep their original shape")
+        warnings.append(
+            f"{', '.join(not_moved)}: only the one-to-one swaps were frozen; the feature's other rules "
+            "(e.g. for accented letters, ligatures, or swaps that depend on neighboring characters) "
+            "can't be frozen, so some characters keep their original shape"
+        )
     if result.stale_rules:
-        warnings.append(f"{result.stale_rules} group(s) of the font's rules can't be updated for the frozen glyphs, "
-                        "so some ligatures and forms that depend on neighboring characters won't appear")
+        warnings.append(
+            f"{result.stale_rules} group(s) of the font's rules can't be updated for the frozen glyphs, "
+            "so some ligatures and forms that depend on neighboring characters won't appear"
+        )
     return warnings
 
 
@@ -302,8 +333,10 @@ def _long_name_warning(family_names: list[str]) -> list[str]:
     longest = max(family_names, key=len, default="")
     if len(longest) <= WINDOWS_FAMILY_LIMIT:
         return []
-    return [f"family names like '{longest}' are longer than {WINDOWS_FAMILY_LIMIT} characters, which some "
-            "Windows apps cut off; a shorter --name avoids this"]
+    return [
+        f"family names like '{longest}' are longer than {WINDOWS_FAMILY_LIMIT} characters, which some "
+        "Windows apps cut off; a shorter --name avoids this"
+    ]
 
 
 def _prepare_static_input(font, options, old_family, frozen, warnings) -> Prepared:
@@ -333,21 +366,31 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prep
     italic = is_italic(font)
     cff2 = "CFF2" in font
     vf_bytes = to_bytes(font)
-    job_args = dict(vf_bytes=vf_bytes, family=family, letter_spacing=options.letter_spacing, formats=formats,
-                    hint=options.hint, remove_overlaps=options.remove_overlaps, subroutinize=options.subroutinize)
+    job_args = {
+        "vf_bytes": vf_bytes,
+        "family": family,
+        "letter_spacing": options.letter_spacing,
+        "formats": formats,
+        "hint": options.hint,
+        "remove_overlaps": options.remove_overlaps,
+        "subroutinize": options.subroutinize,
+    }
     if options.style_name and not options.static:
         raise FontmintError("--style-name names a static font, but --no-static builds none")
     if options.axes:
         files, jobs = {}, _axis_jobs(font, options.axes, folder, italic, job_args)
         if not options.static and any(j.kind == "static" for j in jobs):
-            raise FontmintError("single axis values (and 'all') make static fonts, but --no-static builds none; "
-                                "use ranges like --weight 300:700")
+            raise FontmintError(
+                "single axis values (and 'all') make static fonts, but --no-static builds none; "
+                "use ranges like --weight 300:700"
+            )
     else:
         jobs = _named_instance_jobs(font, italic, job_args) if options.static else []
         if cff2 and jobs:
             jobs = []
-            warnings.append("only the variable font is built: static fonts from CFF2 (OTF) variable fonts aren't "
-                            "supported yet")
+            warnings.append(
+                "only the variable font is built: static fonts from CFF2 (OTF) variable fonts aren't supported yet"
+            )
         stem = f"{folder}{'-Italic' if italic else ''}[{_tags(a.axisTag for a in font['fvar'].axes)}]"
         if options.letter_spacing:  # the jobs add it themselves, to their instance
             add_letter_spacing(font, options.letter_spacing)
@@ -367,13 +410,17 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prep
     statics = [j for j in jobs if j.kind == "static"]
     if options.style_name:
         if len(statics) != 1:
-            raise FontmintError("--style-name only works when exactly one static font is built "
-                                f"(this would build {len(statics)}; give each axis option a single value)")
+            raise FontmintError(
+                "--style-name only works when exactly one static font is built "
+                f"(this would build {len(statics)}; give each axis option a single value)"
+            )
         _restyle(statics[0], apply_style_name(options.style_name, italic))
     warnings += _long_name_warning([legacy_names(j.family, j.style)[0] for j in statics])
     if statics and cff2:
-        raise FontmintError("static fonts from CFF2 (OTF) variable fonts aren't supported yet; "
-                            "use the font's TrueType (.ttf) version if there is one")
+        raise FontmintError(
+            "static fonts from CFF2 (OTF) variable fonts aren't supported yet; "
+            "use the font's TrueType (.ttf) version if there is one"
+        )
     stems = [j.stem for j in jobs]
     if dupes := sorted({s for s in stems if stems.count(s) > 1}):
         raise FontmintError(f"several outputs would get the same name: {', '.join(dupes)}")
@@ -400,7 +447,7 @@ def _named_instance_jobs(font: TTFont, italic: bool, job_args: dict) -> list[Job
     return jobs
 
 
-def _axis_jobs(font: TTFont, specs: dict, folder: str, italic: bool, job_args: dict) -> list[Job]:
+def _axis_jobs(font: TTFont, specs: Mapping[str, object], folder: str, italic: bool, job_args: dict) -> list[Job]:
     """Jobs for --weight/--width/…: pinned combinations → static, ranges → custom-range variable."""
     fvar_axes = [a.axisTag for a in font["fvar"].axes]
     defaults = {a.axisTag: a.defaultValue for a in font["fvar"].axes}
@@ -421,9 +468,14 @@ def _axis_jobs(font: TTFont, specs: dict, folder: str, italic: bool, job_args: d
 
 
 def _static_job(loc: dict[str, float], style: str, weight: int, job_args: dict) -> Job:
-    job = Job(kind="static", stem="", location=loc,
-              weight_class=round(loc.get("wght", weight)),
-              width_class=width_class(loc["wdth"]) if "wdth" in loc else None, **job_args)
+    job = Job(
+        kind="static",
+        stem="",
+        location=loc,
+        weight_class=round(loc.get("wght", weight)),
+        width_class=width_class(loc["wdth"]) if "wdth" in loc else None,
+        **job_args,
+    )
     _restyle(job, style)
     return job
 
@@ -516,9 +568,11 @@ def check_clashes(outputs: list[list[str]]) -> None:
     paths = Counter(path for paths in outputs for path in paths)
     if clashes := sorted(path for path, n in paths.items() if n > 1):
         folder, name = clashes[0].split("/")[0], clashes[0].split("/")[-1]
-        raise FontmintError(f"two inputs would both write {name} into {folder}/: the same font was given twice, "
-                            "or different families got the same --name (build them separately, with different "
-                            "names)")
+        raise FontmintError(
+            f"two inputs would both write {name} into {folder}/: the same font was given twice, "
+            "or different families got the same --name (build them separately, with different "
+            "names)"
+        )
 
 
 def mint(font_bytes: bytes, options: Options | None = None) -> dict[str, bytes]:

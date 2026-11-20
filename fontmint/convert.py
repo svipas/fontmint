@@ -37,8 +37,14 @@ def strip_hinting(font: TTFont) -> TTFont:
             glyf[name].removeHinting()
         maxp = font["maxp"]
         maxp.maxZones = 1
-        for field in ("maxTwilightPoints", "maxStorage", "maxFunctionDefs", "maxInstructionDefs",
-                      "maxStackElements", "maxSizeOfInstructions"):
+        for field in (
+            "maxTwilightPoints",
+            "maxStorage",
+            "maxFunctionDefs",
+            "maxInstructionDefs",
+            "maxStackElements",
+            "maxSizeOfInstructions",
+        ):
             setattr(maxp, field, 0)
     return font
 

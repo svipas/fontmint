@@ -127,6 +127,7 @@ def show_info(path: Path) -> None:
         info = core.inspect(read_font(path))
     except FontmintError as e:
         raise FontmintError(f"{path.name}: {e}") from e
+
     def row(label: str, value: str) -> None:
         print(f"  {label:<12} {value}")
 
@@ -152,38 +153,67 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="fontmint",
         description="Make OpenType features (stylistic sets, slashed zero, ...) the default glyphs and\n"
-                    "rename the font family. Variable fonts are also exported as variable and static\n"
-                    "TTF (hinted and unhinted), OTF and WOFF2.",
+        "rename the font family. Variable fonts are also exported as variable and static\n"
+        "TTF (hinted and unhinted), OTF and WOFF2.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"Examples:{examples}" if examples else None,
         allow_abbrev=False,
     )
-    p.add_argument("fonts", nargs="+", type=Path, metavar="FONT",
-                   help="font file(s): variable or static TTF/OTF/WOFF2")
+    p.add_argument("fonts", nargs="+", type=Path, metavar="FONT", help="font file(s): variable or static TTF/OTF/WOFF2")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    p.add_argument("--info", action="store_true",
-                   help="show the font's axes, named instances, features, languages and line height")
-    p.add_argument("--features", default="", metavar="TAGS",
-                   help="features to make the default (freeze), e.g. ss02,zero; for a feature with several "
-                        "alternates, add a number: cv47=2 picks the second")
-    p.add_argument("--language", default="", metavar="TAG",
-                   help="freeze the forms the font has for a language, e.g. --features locl --language ROM for "
-                        "Romanian ș ț with a comma below (--info shows the font's languages)")
-    p.add_argument("--disable", default="", metavar="TAGS",
-                   help="features to turn off, e.g. calt,liga for no ligatures (--info shows which a font has)")
-    p.add_argument("--line-height", type=float, default=None, metavar="N",
-                   help="line spacing as a multiple of the font size, like CSS line-height, e.g. 1.4; "
-                        "0.5 to 3 (--info shows the current value)")
-    p.add_argument("--letter-spacing", type=float, default=0, metavar="EM",
-                   help="extra space after each character as a fraction of the font size, like CSS "
-                        "letter-spacing in em, e.g. 0.05; -0.5 to 1 (negative values tighten)")
-    p.add_argument("--subset", default="", metavar="LIST",
-                   help="keep only these characters, for smaller web fonts: latin, latin-ext, cyrillic, "
-                        "cyrillic-ext, greek, vietnamese, or ranges like U+2190-21FF (comma-separated). "
-                        "Only latin has digits, punctuation and the space: add it to the others")
-    p.add_argument("--name", default="", metavar="NAME",
-                   help='new family name, e.g. "Inter Clear" (recommended, so your build doesn\'t clash with '
-                        'the original)')
+    p.add_argument(
+        "--info", action="store_true", help="show the font's axes, named instances, features, languages and line height"
+    )
+    p.add_argument(
+        "--features",
+        default="",
+        metavar="TAGS",
+        help="features to make the default (freeze), e.g. ss02,zero; for a feature with several "
+        "alternates, add a number: cv47=2 picks the second",
+    )
+    p.add_argument(
+        "--language",
+        default="",
+        metavar="TAG",
+        help="freeze the forms the font has for a language, e.g. --features locl --language ROM for "
+        "Romanian ș ț with a comma below (--info shows the font's languages)",
+    )
+    p.add_argument(
+        "--disable",
+        default="",
+        metavar="TAGS",
+        help="features to turn off, e.g. calt,liga for no ligatures (--info shows which a font has)",
+    )
+    p.add_argument(
+        "--line-height",
+        type=float,
+        default=None,
+        metavar="N",
+        help="line spacing as a multiple of the font size, like CSS line-height, e.g. 1.4; "
+        "0.5 to 3 (--info shows the current value)",
+    )
+    p.add_argument(
+        "--letter-spacing",
+        type=float,
+        default=0,
+        metavar="EM",
+        help="extra space after each character as a fraction of the font size, like CSS "
+        "letter-spacing in em, e.g. 0.05; -0.5 to 1 (negative values tighten)",
+    )
+    p.add_argument(
+        "--subset",
+        default="",
+        metavar="LIST",
+        help="keep only these characters, for smaller web fonts: latin, latin-ext, cyrillic, "
+        "cyrillic-ext, greek, vietnamese, or ranges like U+2190-21FF (comma-separated). "
+        "Only latin has digits, punctuation and the space: add it to the others",
+    )
+    p.add_argument(
+        "--name",
+        default="",
+        metavar="NAME",
+        help='new family name, e.g. "Inter Clear" (recommended, so your build doesn\'t clash with the original)',
+    )
 
     g = p.add_argument_group(
         "axes (variable fonts)",
@@ -194,22 +224,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     for flag, (tag, help_text) in AXIS_FLAGS.items():
         g.add_argument(flag, action="append", default=[], metavar="VALUES", help=f"{help_text} [{tag}]")
-    g.add_argument("--axis", action="append", default=[], metavar="TAG=VALUES",
-                   help="any other axis by its tag, e.g. --axis MONO=1 (repeatable)")
-    g.add_argument("--style-name", default="", metavar="NAME",
-                   help="style name when exactly one static font is built, e.g. --weight 375 --style-name Regular")
+    g.add_argument(
+        "--axis",
+        action="append",
+        default=[],
+        metavar="TAG=VALUES",
+        help="any other axis by its tag, e.g. --axis MONO=1 (repeatable)",
+    )
+    g.add_argument(
+        "--style-name",
+        default="",
+        metavar="NAME",
+        help="style name when exactly one static font is built, e.g. --weight 375 --style-name Regular",
+    )
 
     o = p.add_argument_group("output")
-    o.add_argument("--formats", default=None, metavar="LIST",
-                   help=f"formats to build from variable fonts, any of {','.join(FORMATS)} (default: all); "
-                        "ttf and woff2 give hinted and unhinted static fonts. Static input keeps its format")
-    o.add_argument("--no-static", action="store_true",
-                   help="build only the variable font from variable input, no static fonts")
-    o.add_argument("--no-hint", action="store_true",
-                   help="don't build hinted static fonts (needed for fonts without Latin letters, e.g. icon fonts)")
+    o.add_argument(
+        "--formats",
+        default=None,
+        metavar="LIST",
+        help=f"formats to build from variable fonts, any of {','.join(FORMATS)} (default: all); "
+        "ttf and woff2 give hinted and unhinted static fonts. Static input keeps its format",
+    )
+    o.add_argument(
+        "--no-static", action="store_true", help="build only the variable font from variable input, no static fonts"
+    )
+    o.add_argument(
+        "--no-hint",
+        action="store_true",
+        help="don't build hinted static fonts (needed for fonts without Latin letters, e.g. icon fonts)",
+    )
     o.add_argument("--output", default="dist", metavar="DIR", help="output directory (default: ./dist)")
-    o.add_argument("--jobs", type=positive_int, default=os.cpu_count() or 1, metavar="N",
-                   help="number of fonts to build in parallel (default: number of CPUs)")
+    o.add_argument(
+        "--jobs",
+        type=positive_int,
+        default=os.cpu_count() or 1,
+        metavar="N",
+        help="number of fonts to build in parallel (default: number of CPUs)",
+    )
     return p
 
 
@@ -250,8 +302,10 @@ def run(args: argparse.Namespace) -> None:
     for path, prepared in prepared_fonts:
         log(path.name)
         if _has_files(out / prepared.folder):
-            log(f"  warning: {out / prepared.folder} already exists; files from earlier runs are kept unless this run "
-                "replaces them")
+            log(
+                f"  warning: {out / prepared.folder} already exists; files from earlier runs are kept unless this run "
+                "replaces them"
+            )
         if options.features:
             language = f" ({options.language})" if options.language else ""
             log(f"  froze {options.features}{language}: {prepared.frozen} characters remapped")
@@ -309,8 +363,8 @@ def _join_negative_axis_values(argv: list[str]) -> list[str]:
 
 def main(argv: list[str] | None = None) -> None:
     for stream in (sys.stdout, sys.stderr):  # font and file names can hold characters a terminal can't show
-        if hasattr(stream, "reconfigure"):
-            stream.reconfigure(errors="replace")
+        if reconfigure := getattr(stream, "reconfigure", None):
+            reconfigure(errors="replace")
     parser = build_parser()
     args = parser.parse_args(_join_negative_axis_values(sys.argv[1:] if argv is None else argv))
     try:

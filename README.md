@@ -8,9 +8,8 @@
 </p>
 
 <p align="center">
-  <a href="https://svipas.github.io/fontmint"><strong>Try it in your browser →</strong></a>
-  &nbsp;·&nbsp;
-  <a href="#installation"><strong>Install the command line</strong></a>
+  <a href="https://svipas.github.io/fontmint"><img src="assets/web.svg" alt="fontmint in your browser" width="344"></a>
+  <a href="#installation"><img src="assets/cli.svg" alt="fontmint on the command line" width="344"></a>
 </p>
 
 <p align="center">
@@ -27,15 +26,14 @@
 
 ---
 
-Many fonts contain alternative letter shapes, such as a slashed zero, that only show up in apps where you can turn on OpenType features. fontmint makes those alternatives the default (it **freezes** the features) and gives the font a **new family name**, so your version installs next to the original. For **variable fonts** - one file that covers a range of styles along **axes** such as weight and width - it also exports **variable and static fonts at any axis value** (weight 375, Condensed, …) as TTF (hinted and unhinted), OTF and WOFF2. All in one command.
+Many fonts contain alternative letter shapes, such as a slashed zero, that only show up in apps where you can turn on OpenType features. fontmint makes those alternatives the default (it **freezes** the features) and gives the font a **new family name**, so your version installs next to the original. For **variable fonts** - one file that covers a range of styles along **axes** such as weight and width - it also exports **variable and static fonts at any axis value** (weight 375, Condensed, …) as TTF (hinted and unhinted), OTF and WOFF2.
 
-```bash
-fontmint InterVariable*.ttf --features ss02 --name "Inter Clear"
-```
-
-This command builds 94 files: the Inter font with its `ss02` set (slashed zero, `I` with serifs, `l` with a tail - characters that are easy to tell apart) as the default, renamed to **Inter Clear**, in every weight and format.
-
-The same build also runs in your browser at **[svipas.github.io/fontmint](https://svipas.github.io/fontmint)**, and your fonts never leave your computer.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/freeze-dark.svg">
+    <img src="assets/freeze-light.svg" alt="Inter with its ss02 set frozen and renamed to Inter Clear: I, l and 0 become easy to tell apart" width="640">
+  </picture>
+</p>
 
 ## Features
 
@@ -55,7 +53,7 @@ The same build also runs in your browser at **[svipas.github.io/fontmint](https:
 
 ## Web version
 
-**[svipas.github.io/fontmint](https://svipas.github.io/fontmint)** runs fontmint in your browser. Your fonts never leave your computer: fontmint runs on your device with [Pyodide](https://pyodide.org) (Python in WebAssembly).
+**[svipas.github.io/fontmint](https://svipas.github.io/fontmint)** runs fontmint in your browser with [Pyodide](https://pyodide.org) (Python in WebAssembly), so your fonts never leave your computer.
 
 It can freeze and turn off features, rename, change line height and letter spacing, subset, and build variable and static fonts at any axis value. A few things need the command line:
 
@@ -70,20 +68,16 @@ The page shows the same build as commands you can copy, so you can move to the c
 
 ## Installation
 
-> [!IMPORTANT]
-> Requires Python 3.11 or newer. Check with `python3 --version`; the Python included with macOS is 3.9, so install a newer one with Homebrew or from python.org.
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then:
 
 ```bash
+# install the fontmint command
+uv tool install git+https://github.com/svipas/fontmint
+
+# or run it from a clone, without installing
 git clone https://github.com/svipas/fontmint.git
 cd fontmint
-python3 -m venv .venv
-.venv/bin/pip install -e .
-```
-
-Run it as `.venv/bin/fontmint`, or add a link to it in a folder on your `PATH`:
-
-```bash
-mkdir -p ~/.local/bin && ln -s "$PWD/.venv/bin/fontmint" ~/.local/bin/fontmint
+uv run fontmint --help
 ```
 
 ## Usage
@@ -409,8 +403,14 @@ Options also take the same text as the command line, like `features="ss02,cv47=2
 
 ## Development
 
+fontmint uses [uv](https://docs.astral.sh/uv/) for the environment, [Ruff](https://docs.astral.sh/ruff/) to format and lint, and [ty](https://docs.astral.sh/ty/) to check types:
+
 ```bash
-.venv/bin/python -m unittest
+uv sync  # install fontmint, ruff and ty into .venv
+uv run python -m unittest
+uv run ruff format
+uv run ruff check
+uv run ty check
 ```
 
 The website lives in `web/` and needs [Bun](https://bun.com):
@@ -418,8 +418,8 @@ The website lives in `web/` and needs [Bun](https://bun.com):
 ```bash
 cd web
 bun install
-bun run assets   # Pyodide, fontTools and a fontmint wheel built from this repo
-bun run dev      # dev server with hot reload
+bun run assets  # Pyodide, fontTools and a fontmint wheel built from this repo
+bun run dev  # dev server with hot reload
 ```
 
 Tests build tiny fonts in code, so the repo contains no binary fixtures. For the project layout, design rules and how to verify changes, see [AGENTS.md](AGENTS.md) and [docs/](docs/). They are written for AI coding agents, but are just as useful for human contributors.

@@ -19,8 +19,8 @@ from __future__ import annotations
 import io
 import time
 import zipfile
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, replace
-from typing import Callable
 
 from fontmint import FontmintError, Options, build_job, inspect
 from fontmint import prepare as prepare_font
@@ -28,7 +28,7 @@ from fontmint.common import load
 from fontmint.core import Prepared, check_clashes, output_paths
 from fontmint.features import changed_characters
 
-__all__ = ["describe", "prepare", "check_clashes", "build", "zip_files"]
+__all__ = ["build", "check_clashes", "describe", "prepare", "zip_files"]
 
 Report = Callable[[dict], None]
 
@@ -62,8 +62,10 @@ def web_options(options: dict, variable: bool, cff2: bool) -> Options:
         own = "otf" if cff2 else "ttf"
         formats = set(options.get("formats") or (own, "woff2"))
         if "otf" in formats and not cff2:
-            raise FontmintError("static OTF fonts need the fontmint command line, which merges overlapping outlines "
-                                "and compacts them; here, choose ttf or woff2")
+            raise FontmintError(
+                "static OTF fonts need the fontmint command line, which merges overlapping outlines "
+                "and compacts them; here, choose ttf or woff2"
+            )
         options["formats"] = formats
     options["hint"] = False
     return Options(**options)
@@ -115,12 +117,15 @@ def _merge(plans: list[Prepared]) -> Prepared:
         return plans[0]
     paths = [path for plan in plans for path in output_paths(plan)]
     if clashes := sorted({path for path in paths if paths.count(path) > 1}):
-        raise FontmintError(f"two styles would both build {clashes[0].split('/')[-1]}: give each style its own "
-                            "axis values and name")
-    return replace(plans[0],
-                   warnings=list(dict.fromkeys(warning for plan in plans for warning in plan.warnings)),
-                   files={path: data for plan in plans for path, data in plan.files.items()},
-                   jobs=[job for plan in plans for job in plan.jobs])
+        raise FontmintError(
+            f"two styles would both build {clashes[0].split('/')[-1]}: give each style its own axis values and name"
+        )
+    return replace(
+        plans[0],
+        warnings=list(dict.fromkeys(warning for plan in plans for warning in plan.warnings)),
+        files={path: data for plan in plans for path, data in plan.files.items()},
+        jobs=[job for plan in plans for job in plan.jobs],
+    )
 
 
 def build(name: str, report: Report) -> dict[str, bytes]:
@@ -133,18 +138,27 @@ def build(name: str, report: Report) -> dict[str, bytes]:
             files |= build_job(job)
         except Exception as e:  # FontmintError or a library error
             raise FontmintError(f"{name}: {job.stem}: {e}") from e
-        event = {"type": "job", "font": name, "done": done, "total": len(prepared.jobs), "style": job.stem,
-                 "seconds": round(time.perf_counter() - started, 1), "where": _where(job.location)}
+        event = {
+            "type": "job",
+            "font": name,
+            "done": done,
+            "total": len(prepared.jobs),
+            "style": job.stem,
+            "seconds": round(time.perf_counter() - started, 1),
+            "where": _where(job.location),
+        }
         if job.kind == "static":
             event["location"] = dict(job.location)
         report(event)
     return files
 
 
-def _where(location: dict) -> str:
+def _where(location: Mapping) -> str:
     """Axis values as the log shows them: "wght 375" or, for a custom range, "wght 300–700"."""
-    return ", ".join(f"{tag} {value[0]:g}–{value[1]:g}" if isinstance(value, tuple) else f"{tag} {value:g}"
-                     for tag, value in location.items())
+    return ", ".join(
+        f"{tag} {value[0]:g}–{value[1]:g}" if isinstance(value, tuple) else f"{tag} {value:g}"
+        for tag, value in location.items()
+    )
 
 
 def zip_files(files: dict[str, bytes], report: Report) -> bytes:

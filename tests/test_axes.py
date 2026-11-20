@@ -45,8 +45,12 @@ class PlanTest(unittest.TestCase):
         p = plan(self.font, {"wght": "400,700", "wdth": "75,100"})
         self.assertEqual(
             p.combos,
-            [{"wght": 400, "wdth": 75}, {"wght": 400, "wdth": 100},
-             {"wght": 700, "wdth": 75}, {"wght": 700, "wdth": 100}],
+            [
+                {"wght": 400, "wdth": 75},
+                {"wght": 400, "wdth": 100},
+                {"wght": 700, "wdth": 75},
+                {"wght": 700, "wdth": 100},
+            ],
         )
         self.assertEqual(p.labeled, {"wght", "wdth"})
 

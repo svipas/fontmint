@@ -30,9 +30,33 @@ Issues = "https://github.com/svipas/fontmint/issues"
 [project.scripts]
 fontmint = "fontmint.cli:main"
 
-[build-system]
-requires = ["setuptools>=77"]
-build-backend = "setuptools.build_meta"
+[dependency-groups]
+dev = ["ruff==0.17.6", "ty==0.0.107"]
 
-[tool.setuptools]
-packages = ["fontmint"]
+[build-system]
+requires = ["uv_build>=0.13.9,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+
+[tool.ruff]
+indent-width = 4
+line-length = 120
+
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "double"
+
+[tool.ruff.lint]
+allowed-confusables = ["–", "×", "−"]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "PIE", "RET", "PERF", "RUF"]
+ignore = [
+    "SIM118", # fontTools' dict-like tables (TTFont, CharStrings) have keys() but no __iter__
+]
+
+[tool.ty.analysis]
+replace-imports-with-any = ["fontTools.**"]
+
+[tool.ty.environment]
+extra-paths = ["web"] # tests/test_web.py imports fontmint_web from there

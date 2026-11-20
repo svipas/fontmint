@@ -1,7 +1,6 @@
 // Writes the tiny test fonts from tests/fixtures.py into a folder, for the smoke and
 // end-to-end tests. Runs on Bun and Node (Playwright's runner), so it uses Node's APIs.
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 const repo = join(import.meta.dirname, "..", "..");
@@ -25,9 +24,7 @@ folder.mkdir(parents=True, exist_ok=True)
 
 /** Writes the fonts and returns their paths, keyed like FIXTURES. */
 export function writeFixtureFonts(folder: string): typeof FIXTURES {
-  const venv = join(repo, ".venv", "bin", "python");
-  const python = existsSync(venv) ? venv : "python3";
-  execFileSync(python, ["-c", SCRIPT, folder, FIXTURES.variable, FIXTURES.italic, FIXTURES.static], {
+  execFileSync("uv", ["run", "python", "-c", SCRIPT, folder, FIXTURES.variable, FIXTURES.italic, FIXTURES.static], {
     cwd: repo,
     stdio: "inherit",
   });

@@ -80,14 +80,15 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 
 ## Setup and running
 
-- `python3 -m venv .venv && .venv/bin/pip install -e .` sets up a development install.
-- `.venv/bin/fontmint FONT --info` shows axes, named instances, features and languages.
-- `.venv/bin/fontmint FONT --features ss01 --name "X" --output /tmp/x` runs the tool. Write test output outside the repo; `dist/` is gitignored but easy to forget.
+- `uv sync` installs fontmint, ruff and ty into `.venv`, at the versions in `uv.lock`.
+- `uv run fontmint FONT --info` shows axes, named instances, features and languages.
+- `uv run fontmint FONT --features ss01 --name "X" --output /tmp/x` runs the tool. Write test output outside the repo; `dist/` is gitignored but easy to forget.
 - The website needs [Bun](https://bun.com) and the development install above. In `web/`: `bun install`, then `bun run assets` (again after changing `fontmint/`, to rebuild the wheel the page loads), then `bun run dev` for a dev server with hot reload. `bun run build` writes `web/dist/`; `bun run serve` serves it under `/fontmint/`, as GitHub Pages does.
 
 ## Verifying
 
-- Run `.venv/bin/python -m unittest` after every change. It takes about two seconds.
+- Run `uv run python -m unittest` after every change. It takes about two seconds.
+- Run `uv run ruff format`, `uv run ruff check` and `uv run ty check` before you hand back. CI fails on any of them.
 - Behavior changes ship with focused tests in the matching `tests/test_<module>.py`. Extend an existing case where one fits before adding a new one.
 - Bug fixes get a failing test first, then the fix.
 - Build test fonts with `tests/fixtures.py`. Never commit binary font files.
@@ -109,7 +110,7 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 - `docs/` holds decisions, constraints and traps that are hard to see from the code. Before adding a paragraph, ask what a maintainer would get wrong without it. If reading the code answers the question, leave it out.
 - When a documented rule changes, rewrite or remove the old text instead of appending a new account.
 - `CHANGELOG.md` lists what changed for users of the command line and library, per version; `web/CHANGELOG.md` does the same for the website. Add a line under the next version for every change a user can notice - in both when a core change shows on the website too.
-- Format Markdown with `npx --yes oxfmt README.md AGENTS.md CHANGELOG.md docs` (`--check` to verify without writing).
+- Format Markdown with `npx --yes oxfmt README.md AGENTS.md CHANGELOG.md docs` (`--check` to verify without writing). `uv run ruff format` formats the Python examples in them.
 
 ## Releasing
 
@@ -128,8 +129,9 @@ The command line and the website have their own versions, tags and GitHub Releas
 
 ## Taste
 
-- Python 3.11+ (fontTools 4.66 and newer need it), type hints, `from __future__ import annotations`, docstrings on public functions, lines up to about 120 characters. There is no linter config; match the surrounding code.
-- Standard library first. Python tests use `unittest`; don't add test or tooling dependencies to the Python package.
+- Python 3.11+ (fontTools 4.66 and newer need it), type hints, `from __future__ import annotations`, docstrings on public functions. Ruff formats and lints (settings in `pyproject.toml`); fix a finding rather than adding `# noqa`.
+- ty treats fontTools as `Any`: its tables get their attributes at runtime, where ty can't see them. Fix ty's findings in our own code rather than silencing them.
+- Standard library first. Python tests use `unittest`. Tooling goes in the `dev` dependency group, never in the package's `dependencies`.
 - The website: TypeScript, React with React Compiler (don't import `useMemo`, `useCallback` or `memo`; oxlint rejects them), Tailwind, exact versions in `web/package.json`. Build the page from the shadcn components in `web/src/components/ui/` (add missing ones with `bunx shadcn add`; it imports `cn` from a package named `cn` and adds that package to `package.json`, so point the import at `@/lib/utils` and remove the package); hand-write an element only where shadcn has nothing that fits, such as the drop area or the preview's text box.
 - Default to no comment. Write one for a constraint, an external quirk or an invariant the code can't show.
 - Errors are for the user: say what's wrong and how to fix it (`--weight expects …`, `add ttf or woff2 to formats`).

@@ -11,7 +11,9 @@ Several axes multiply: --weight 400,700 --width 75,100 → 4 fonts.
 from __future__ import annotations
 
 import itertools
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import TypeGuard
 
 from fontTools.ttLib import TTFont
 
@@ -59,10 +61,10 @@ def _parse_item(text: str):
 @dataclass
 class Plan:
     combos: list[dict[str, Value]]  # one dict per output, flagged axes only
-    labeled: set[str]               # axes with several pinned values (need a style label)
+    labeled: set[str]  # axes with several pinned values (need a style label)
 
 
-def plan(font: TTFont, specs: dict[str, object]) -> Plan:
+def plan(font: TTFont, specs: Mapping[str, object]) -> Plan:
     """Expand axis specs against the font's fvar into output combinations."""
     fvar = font["fvar"]
     axes = {a.axisTag: a for a in fvar.axes}
@@ -80,8 +82,9 @@ def plan(font: TTFont, specs: dict[str, object]) -> Plan:
             if item == "all":
                 named = sorted({i.coordinates[tag] for i in fvar.instances if tag in i.coordinates})
                 if not named:
-                    raise FontmintError(f"font has no named instances on the '{tag}' axis; "
-                                       "give values instead of 'all'")
+                    raise FontmintError(
+                        f"font has no named instances on the '{tag}' axis; give values instead of 'all'"
+                    )
                 values += named
                 continue
             for v in item if isinstance(item, tuple) else (item,):
@@ -91,10 +94,10 @@ def plan(font: TTFont, specs: dict[str, object]) -> Plan:
         expanded[tag] = list(dict.fromkeys(values))
 
     tags = list(expanded)
-    combos = [dict(zip(tags, vals)) for vals in itertools.product(*(expanded[t] for t in tags))]
+    combos = [dict(zip(tags, vals, strict=True)) for vals in itertools.product(*(expanded[t] for t in tags))]
     labeled = {t for t, vals in expanded.items() if sum(not isinstance(v, tuple) for v in vals) > 1}
     return Plan(combos, labeled)
 
 
-def is_static(combo: dict[str, Value]) -> bool:
+def is_static(combo: dict[str, Value]) -> TypeGuard[dict[str, float]]:
     return not any(isinstance(v, tuple) for v in combo.values())

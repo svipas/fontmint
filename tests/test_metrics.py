@@ -60,8 +60,9 @@ class LetterSpacingTest(unittest.TestCase):
         for name in top.CharStrings.keys():
             charstring = top.CharStrings[name]
             private = charstring.private
-            extractor = T2WidthExtractor(getattr(private, "Subrs", []), top.GlobalSubrs, private.nominalWidthX,
-                                         private.defaultWidthX)
+            extractor = T2WidthExtractor(
+                getattr(private, "Subrs", []), top.GlobalSubrs, private.nominalWidthX, private.defaultWidthX
+            )
             extractor.execute(charstring)
             widths[name] = extractor.width
         return widths
@@ -77,7 +78,7 @@ class LetterSpacingTest(unittest.TestCase):
         font = fx.open_font(fx.static_otf())
         add_letter_spacing(font, 0.05)
         font = fx.open_font(fx._save(font))
-        self.assertEqual(self.cff_widths(font), {name: 650 for name in font.getGlyphOrder()})
+        self.assertEqual(self.cff_widths(font), dict.fromkeys(font.getGlyphOrder(), 650))
 
     def test_cff_widths_left_to_the_default_or_kept_in_a_subroutine(self):
         # real OTFs leave out the width of glyphs that have the font's default width (an
@@ -99,7 +100,7 @@ class LetterSpacingTest(unittest.TestCase):
 
         add_letter_spacing(font, 0.05)
         font = fx.open_font(fx._save(font))
-        self.assertEqual(self.cff_widths(font), {name: 650 for name in font.getGlyphOrder()})
+        self.assertEqual(self.cff_widths(font), dict.fromkeys(font.getGlyphOrder(), 650))
         self.assertEqual(self.outlines(font), before)
 
     def test_double_width_glyphs_of_a_monospaced_font_get_twice_the_space(self):
@@ -121,12 +122,16 @@ class MetricsOptionsTest(unittest.TestCase):
     def test_static_and_variable_outputs(self):
         static = mint(fx.static_otf(), Options(name="Mint Sans", line_height=1.5, letter_spacing=0.02))
         plain = mint(fx.variable_ttf(), Options(name="Mint Sans", axes={"wght": "700"}, formats="ttf", hint=False))
-        spaced = mint(fx.variable_ttf(), Options(name="Mint Sans", line_height=1.5, letter_spacing=0.02,
-                                                 axes={"wght": "700"}, formats="ttf", hint=False))
+        spaced = mint(
+            fx.variable_ttf(),
+            Options(
+                name="Mint Sans", line_height=1.5, letter_spacing=0.02, axes={"wght": "700"}, formats="ttf", hint=False
+            ),
+        )
         for path, data in {**static, **spaced}.items():
             with self.subTest(path=path):
                 self.assertAlmostEqual(inspect(data).line_height, 1.5)
-        (path, data), = spaced.items()
+        ((path, data),) = spaced.items()
         before, after = fx.open_font(plain[path])["hmtx"], fx.open_font(data)["hmtx"]
         self.assertEqual(after["H"][0], before["H"][0] + 20)  # on top of the bold instance's own width
 
@@ -144,8 +149,10 @@ class MetricsOptionsTest(unittest.TestCase):
         self.assertEqual((widths["MintSans-Regular.ttf"], widths["MintSans-Condensed.ttf"]), (0, 650))
 
     def test_out_of_range(self):
-        for options, message in ((Options(line_height=0), "--line-height 0 is out of range"),
-                                 (Options(letter_spacing=2), "--letter-spacing 2 is out of range")):
+        for options, message in (
+            (Options(line_height=0), "--line-height 0 is out of range"),
+            (Options(letter_spacing=2), "--letter-spacing 2 is out of range"),
+        ):
             with self.subTest(message=message), self.assertRaisesRegex(FontmintError, message):
                 mint(fx.static_ttf(), options)
 

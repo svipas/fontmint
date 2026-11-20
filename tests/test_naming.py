@@ -108,8 +108,14 @@ class RenameFamilyTest(unittest.TestCase):
         """'Inter' is both the display and PostScript form - each name kind must get the right one."""
         font = fx.open_font(fx.static_ttf())
         name = font["name"]
-        for i, value in ((1, "Inter Medium"), (16, "Inter"), (17, "Medium"), (4, "Inter Medium"),
-                         (6, "Inter-Medium"), (3, "1.000;TEST;Inter-Medium")):
+        for i, value in (
+            (1, "Inter Medium"),
+            (16, "Inter"),
+            (17, "Medium"),
+            (4, "Inter Medium"),
+            (6, "Inter-Medium"),
+            (3, "1.000;TEST;Inter-Medium"),
+        ):
             name.setName(value, i, 3, 1, 0x409)
         rename_family(font, "Inter", "Mint New")
         self.assertEqual(name.getDebugName(1), "Mint New Medium")
@@ -153,8 +159,10 @@ class RenameFamilyTest(unittest.TestCase):
         font["name"].setName("TestSans-SemiBold", 6, 3, 1, 0x409)
         self.assertEqual(family_name(font), "Test Sans")
         rename_family(font, family_name(font), "Mint Sans")
-        self.assertEqual([font["name"].getDebugName(i) for i in (1, 4, 6)],
-                         ["Mint Sans SemiBold", "Mint Sans SemiBold", "MintSans-SemiBold"])
+        self.assertEqual(
+            [font["name"].getDebugName(i) for i in (1, 4, 6)],
+            ["Mint Sans SemiBold", "Mint Sans SemiBold", "MintSans-SemiBold"],
+        )
 
     def test_fonts_without_windows_names(self):
         font = fx.open_font(fx.static_ttf())
@@ -163,7 +171,9 @@ class RenameFamilyTest(unittest.TestCase):
             record.platformID, record.platEncID, record.langID = 0, 3, 0
         self.assertEqual(family_name(font), "Test Sans")
         rename_family(font, "Test Sans", "Mint Sans")
-        self.assertEqual([font["name"].getDebugName(i) for i in (0, 1, 6)], [fx.COPYRIGHT, "Mint Sans", "MintSans-Regular"])
+        self.assertEqual(
+            [font["name"].getDebugName(i) for i in (0, 1, 6)], [fx.COPYRIGHT, "Mint Sans", "MintSans-Regular"]
+        )
 
     def test_font_without_a_family_name_cannot_be_renamed(self):
         font = fx.open_font(fx.static_ttf())
@@ -229,7 +239,7 @@ class SetStaticNamesTest(unittest.TestCase):
         self.assertTrue(font["OS/2"].fsSelection & (1 << 5))  # bold bit, so Ctrl+B in "Condensed" finds it
 
     def test_non_linked_weight(self):
-        ps, font, n = self.names("SemiBold Italic", 600)
+        _, font, n = self.names("SemiBold Italic", 600)
         self.assertEqual((n[1], n[2], n[16], n[17]), ("Mint Sans SemiBold", "Italic", "Mint Sans", "SemiBold Italic"))
         self.assertFalse(font["OS/2"].fsSelection & (1 << 5))
 
@@ -244,8 +254,10 @@ class SetStaticNamesTest(unittest.TestCase):
         font["name"].setName("Standard", 2, 3, 1, 0x407)  # German "Regular"
         set_static_names(font, "Mint Sans", "Bold", 700)
         records = {(r.nameID, r.platformID, r.langID): r.toUnicode() for r in font["name"].names}
-        self.assertEqual({key: value for key, value in records.items() if key[0] in (1, 2)},
-                         {(1, 3, 0x409): "Mint Sans", (2, 3, 0x409): "Bold"})
+        self.assertEqual(
+            {key: value for key, value in records.items() if key[0] in (1, 2)},
+            {(1, 3, 0x409): "Mint Sans", (2, 3, 0x409): "Bold"},
+        )
         self.assertEqual({platform for _, platform, _ in records}, {3})
 
         font = fx.open_font(fx.static_ttf())  # a font with Mac names only keeps its notices
