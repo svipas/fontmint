@@ -2,6 +2,11 @@
 
 What changed on [svipas.github.io/fontmint](https://svipas.github.io/fontmint), per website version (`web/package.json`). The website has its own versions and `web-v*` tags; fontmint's command line and library are in the [main changelog](../CHANGELOG.md).
 
+## 0.4.0
+
+- A malicious WOFF2 file can no longer use up the browser's memory.
+- Copying the log or command again keeps its "Copied" up for the full time.
+
 ## 0.3.0
 
 - The zip comes with a `fontmint.txt`: what the build was made from, what was changed, and the command that makes it again.

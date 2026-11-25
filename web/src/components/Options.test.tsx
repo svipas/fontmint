@@ -1,9 +1,9 @@
 import { beforeEach, expect, test } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { resetStore, withFonts } from "../../test/store";
+import { resetStore, setState, withFonts } from "../../test/store";
 import { emptyForm } from "../lib/options";
 import { storedWorkers } from "../lib/pool";
-import { useStore } from "../store";
+import { store } from "../store";
 import { Options, sampleCharacters } from "./Options";
 
 beforeEach(resetStore);
@@ -26,8 +26,8 @@ test("checking an optional feature freezes it; unchecking one on by default turn
   // Base UI's checkbox toggles through its label in happy-dom.
   fireEvent.click(screen.getByText("Stylistic set 2"));
   fireEvent.click(screen.getByText("Standard ligatures"));
-  expect(useStore.getState().form.freeze).toEqual(["ss02"]);
-  expect(useStore.getState().form.disable).toEqual(["liga"]);
+  expect(store.state.form.freeze).toEqual(["ss02"]);
+  expect(store.state.form.disable).toEqual(["liga"]);
   expect(checked()).toEqual(["true", "false"]);
 });
 
@@ -63,7 +63,7 @@ test("the name field asks for a name once it was left empty, and checks it as yo
   fireEvent.change(name, { target: { value: "Mint/Sans" } });
   expect(screen.getByText(/found \//)).toBeTruthy();
   fireEvent.change(name, { target: { value: "Mint Sans" } });
-  expect(useStore.getState().form.name).toBe("Mint Sans");
+  expect(store.state.form.name).toBe("Mint Sans");
   expect(name.getAttribute("aria-invalid")).toBe("false");
 });
 
@@ -72,7 +72,7 @@ test("advanced sections start closed, and open when something in them is set", (
   const { unmount } = render(<Options />);
   expect(screen.queryByLabelText(/Line height/)).toBeNull();
   unmount();
-  useStore.setState({ form: { ...useStore.getState().form, lineHeight: "1.4" } });
+  setState({ form: { ...store.state.form, lineHeight: "1.4" } });
   render(<Options />);
   expect(screen.getByLabelText(/Line height/)).toBeTruthy();
   expect(screen.getByText("line height 1.4")).toBeTruthy();
@@ -130,19 +130,19 @@ test("several custom styles, each with its own values and name", () => {
   const second = screen.getByRole("group", { name: "Style 2" });
   fireEvent.change(second.querySelector("#axis-1-wght")!, { target: { value: "675" } });
   fireEvent.change(second.querySelector("#style-1")!, { target: { value: "Bold" } });
-  expect(useStore.getState().form.styles).toEqual([
+  expect(store.state.form.styles).toEqual([
     { axes: { wght: "375" }, name: "" },
     { axes: { wght: "675" }, name: "Bold" },
   ]);
 
   fireEvent.click(screen.getByRole("button", { name: "Remove style 1" }));
-  expect(useStore.getState().form.styles).toEqual([{ axes: { wght: "675" }, name: "Bold" }]);
+  expect(store.state.form.styles).toEqual([{ axes: { wght: "675" }, name: "Bold" }]);
   expect(screen.queryByRole("group", { name: "Style 2" })).toBeNull();
 });
 
 test("a feature that swaps characters shows them, with a larger view on demand", () => {
   withFonts({});
-  useStore.setState({ fonts: useStore.getState().fonts.map((f) => ({ ...f, face: "fontmint-preview-1" })) });
+  setState({ fonts: store.state.fonts.map((f) => ({ ...f, face: "fontmint-preview-1" })) });
   render(<Options />);
   // ss01 swaps 0 and I (test/fonts.ts); ss02 lists no single characters.
   expect(screen.getByRole("button", { name: "Show what Slashed zero changes" }).textContent).toBe("0I0I");
@@ -160,18 +160,18 @@ test("each section resets its own options, and offers it only while something is
   fireEvent.click(screen.getByText("Stylistic set 2"));
   fireEvent.click(screen.getByText("Standard ligatures"));
   fireEvent.click(screen.getByText("WOFF2"));
-  act(() => useStore.getState().setForm({ name: "Mint Sans", language: "ROM", lineHeight: "1.4", subset: ["latin"] }));
+  act(() => store.actions.setForm({ name: "Mint Sans", language: "ROM", lineHeight: "1.4", subset: ["latin"] }));
 
   fireEvent.click(reset("Reset features")!);
   expect(reset("Reset features")).toBeNull();
   expect(document.activeElement?.textContent).toContain("Features");
   fireEvent.click(reset("Reset output")!);
-  const form = useStore.getState().form;
+  const form = store.state.form;
   expect(form).toEqual({ ...emptyForm, name: "Mint Sans", lineHeight: "1.4", subset: ["latin"] });
 
   fireEvent.click(reset("Reset spacing")!);
   fireEvent.click(reset("Reset characters")!);
-  expect(useStore.getState().form).toEqual({ ...emptyForm, name: "Mint Sans" });
+  expect(store.state.form).toEqual({ ...emptyForm, name: "Mint Sans" });
 });
 
 test("the number of workers is kept, and reset with the output", () => {
@@ -179,13 +179,13 @@ test("the number of workers is kept, and reset with the output", () => {
   const { unmount } = render(<Options />);
   fireEvent.click(screen.getByRole("button", { name: "Workers" }));
   expect(screen.getByLabelText(/Fonts built at the same time/).textContent).toStartWith("Automatic (");
-  act(() => useStore.getState().setMaxWorkers(3));
+  act(() => store.actions.setMaxWorkers(3));
   expect(storedWorkers()).toBe(3);
   unmount();
   render(<Options />);
   expect(screen.getByLabelText(/Fonts built at the same time/).textContent).toStartWith("3"); // opens by itself
   fireEvent.click(screen.getByRole("button", { name: "Reset output" }));
-  expect(useStore.getState().maxWorkers).toBeNull();
+  expect(store.state.maxWorkers).toBeNull();
   expect(storedWorkers()).toBeNull();
 });
 
@@ -195,13 +195,13 @@ test("custom styles count as a change to the output", () => {
   fireEvent.click(screen.getByRole("button", { name: /Axis values and style names/ }));
   fireEvent.click(screen.getByRole("button", { name: "Add another style" }));
   fireEvent.click(reset("Reset output")!);
-  expect(useStore.getState().form.styles).toEqual(emptyForm.styles);
+  expect(store.state.form.styles).toEqual(emptyForm.styles);
   expect(screen.queryByRole("group", { name: "Style 2" })).toBeNull();
 });
 
 test("clearing the name asks for one right away", () => {
   withFonts({});
-  act(() => useStore.getState().setForm({ name: "Test Sans Custom" }));
+  act(() => store.actions.setForm({ name: "Test Sans Custom" }));
   render(<Options />);
   const name = screen.getByLabelText(/New family name/);
   fireEvent.change(name, { target: { value: "" } });
@@ -211,14 +211,14 @@ test("clearing the name asks for one right away", () => {
 
 test("feature samples follow the preview's axes once the sliders rest", async () => {
   withFonts({});
-  useStore.setState({
-    fonts: useStore.getState().fonts.map((f) => ({ ...f, face: "fontmint-preview-1" })),
+  setState({
+    fonts: store.state.fonts.map((f) => ({ ...f, face: "fontmint-preview-1" })),
     previewAxes: { wght: 400, wdth: 100 },
   });
   render(<Options />);
   const sample = screen.getByRole("button", { name: "Show what Slashed zero changes" }).querySelector("span")!;
   expect(sample.style.fontVariationSettings).toBe('"wght" 400, "wdth" 100');
-  act(() => useStore.getState().setPreviewAxis("wght", 900));
+  act(() => store.actions.setPreviewAxis("wght", 900));
   expect(sample.style.fontVariationSettings).toBe('"wght" 400, "wdth" 100');
   await act(() => new Promise((resolve) => setTimeout(resolve, 200)));
   expect(sample.style.fontVariationSettings).toBe('"wght" 900, "wdth" 100');

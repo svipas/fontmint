@@ -13,9 +13,9 @@ const PYODIDE_FILES = ["pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "py
 const PYODIDE_PACKAGES = ["micropip", "brotli"];
 // Pyodide's own fontTools is too old for fontmint, so a newer pure-Python wheel is pinned.
 const FONTTOOLS = {
-  file: "fonttools-4.68.0-py3-none-any.whl",
-  url: "https://files.pythonhosted.org/packages/35/74/4ea331ecc65ba05a58b1e4e8ccd604c8a15565f876dfbf93fc2a2ea2e22b/fonttools-4.68.0-py3-none-any.whl",
-  sha256: "d76f8fdcb6936f5e1045a0c9dd721a4bf11112e60d1e243bfa1d39f06a8b3104",
+  file: "fonttools-4.69.1-py3-none-any.whl",
+  url: "https://files.pythonhosted.org/packages/43/ef/3575cacafe63d7d78b639e815bb3637cd0a66c6365efc5aed636a92cdb12/fonttools-4.69.1-py3-none-any.whl",
+  sha256: "20e9dfac71694d9eeae48bb53c877bdf43b914794d69a769940728a1929cc835",
 };
 
 const web = join(import.meta.dir, "..");

@@ -15,7 +15,6 @@ export function automaticWorkers(): number {
   return Math.max(1, Math.min(cores() - 1, 8));
 }
 
-/** The most workers the user can pick. */
 export function mostWorkers(): number {
   return Math.min(Math.max(cores(), 8), 16);
 }

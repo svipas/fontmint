@@ -1,16 +1,16 @@
 # Testing
 
-## Running
+Two suites: the Python one covers the core, the command line and the website's Python glue; the website's own covers the page.
+
+## Python
 
 ```bash
-uv run python -m unittest  # everything, ~2 s
+uv run python -m unittest
 uv run python -m unittest -v tests.test_core
 uv run python -m unittest tests.test_core.AxisOptionsTest.test_style_name
 ```
 
 Only the standard library's `unittest` is used - don't add pytest or other test dependencies.
-
-## Layout
 
 | File                     | Covers                                                                         |
 | ------------------------ | ------------------------------------------------------------------------------ |
@@ -23,10 +23,34 @@ Only the standard library's `unittest` is used - don't add pytest or other test 
 | `tests/test_core.py`     | end-to-end outputs for every mode, option errors, native helpers stay unloaded |
 | `tests/test_report.py`   | what `fontmint.txt` says, and that the command line reads its commands back    |
 | `tests/test_cli.py`      | the real command in a temp dir, `--info`, error messages + exit codes          |
+| `tests/test_web.py`      | `web/fontmint_web.py`, the glue the page calls, on desktop Python              |
+
+## Website
+
+In `web/`, after `bun install` and `bun run assets`:
+
+```bash
+bun test
+bun test src/store.test.ts
+bun run smoke
+bun run build && bun run e2e
+bun run e2e --project chromium -g 'cancelled'
+```
+
+| Command         | Covers                                                                         | Runs in                        |
+| --------------- | ------------------------------------------------------------------------------ | ------------------------------ |
+| `bun test`      | `src/lib/`, the store and the main components; tests sit next to the code      | Bun with happy-dom, no Python  |
+| `bun run smoke` | `src/pyodide/fontmint.ts` and the glue: what builds without the native helpers | Pyodide under Bun              |
+| `bun run e2e`   | the production build: whole builds, workers, cancelling, crashes, page layout  | Playwright: Chromium + Firefox |
+
+- `smoke` and `e2e` run the fontmint wheel that `bun run assets` built, and `e2e` the page that `bun run build` built: run them again after a change, or the old code is tested.
+- `e2e` uses a server already running on port 4173 (`bun run serve`), which may be another checkout's. It needs Playwright's browsers, once per Playwright version: `bunx playwright install chromium firefox`.
+- `bun test` never starts a worker, so `lib/client.ts`, `worker.ts`, and reading and building fonts in the store are only covered by `e2e`; it also runs the components without React Compiler, which the production build uses.
+- `test/store.ts` puts the store into a known state. Component tests call its `resetStore` before each test, as they all share the one store.
 
 ## Fixtures
 
-`tests/fixtures.py` builds fonts with fontTools' `FontBuilder` - no binary files in the repo. All are family **"Test Sans"** with rectangle glyphs:
+`tests/fixtures.py` builds fonts with fontTools' `FontBuilder` - no binary files in the repo. All are family **"Test Sans"** with rectangle glyphs. The website's `smoke` and `e2e` use some of them too (`web/test/fixture-fonts.ts` writes them to files); its unit tests need no fonts, only the `FontInfo` from `web/test/fonts.ts`.
 
 | Function                                     | Font                                                                                                  |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |

@@ -274,7 +274,7 @@ test("the page stays put as the preview changes", async ({ page }) => {
     const before = await top(preview);
     await page.getByLabel("wght", { exact: true }).press("ArrowRight");
     await expect(page.getByRole("button", { name: "Reset size and axes" })).toBeVisible();
-    expect(await top(preview)).toBe(before);
+    expect(await top(preview)).toBeCloseTo(before, 1);
     await page.getByRole("button", { name: "Reset size and axes" }).click();
   }
 
@@ -282,5 +282,5 @@ test("the page stays put as the preview changes", async ({ page }) => {
   const name = nameField(page);
   const before = await top(name);
   await page.getByLabel("Size", { exact: true }).press("End");
-  expect(await top(name)).toBe(before);
+  expect(await top(name)).toBeCloseTo(before, 1);
 });

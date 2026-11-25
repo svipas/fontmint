@@ -2,6 +2,10 @@
 
 What changed in fontmint's command line and library, per version. The website has its own versions: [web/CHANGELOG.md](web/CHANGELOG.md).
 
+## 0.2.1
+
+- Needs fontTools 4.69.1, which fixes a security issue: a malicious WOFF2 file could use up all memory (GHSA-868m-5w35-h9cq).
+
 ## 0.2.0
 
 - Every build comes with a `fontmint.txt` in its folder: what it was made from, what was changed, and the command that makes it again.

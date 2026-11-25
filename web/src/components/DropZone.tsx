@@ -1,9 +1,10 @@
+import { useSelector } from "@tanstack/react-store";
 import { LockIcon, PlusIcon, TerminalIcon, UploadIcon } from "lucide-react";
 import { type DragEvent, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { useStore } from "@/store";
+import { store } from "@/store";
 import { INSTALL, megabytes, WEB_LIMITS } from "./ui";
 
 const ACCEPT = ".ttf,.otf,.woff2";
@@ -23,10 +24,8 @@ function FileInput({ onFiles }: { onFiles: (files: File[]) => void }) {
   );
 }
 
-/** The big drop area shown before any font is added. */
 export function DropZone() {
-  const addFiles = useStore((s) => s.addFiles);
-  const notice = useStore((s) => s.notice);
+  const notice = useSelector(store, (s) => s.notice);
   const input = useRef<HTMLDivElement>(null);
   const [over, setOver] = useState(false);
 
@@ -64,7 +63,7 @@ export function DropZone() {
           <Button size="lg" className="px-5" onClick={() => input.current?.querySelector("input")?.click()}>
             Choose fonts
           </Button>
-          <FileInput onFiles={addFiles} />
+          <FileInput onFiles={store.actions.addFiles} />
         </div>
         <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
           TTF, OTF or WOFF2, variable or static. Add an upright and its italic together to build the whole family.
@@ -96,10 +95,8 @@ export function DropZone() {
   );
 }
 
-/** A smaller "add more" button, once fonts are in. */
 export function AddFontsButton() {
-  const addFiles = useStore((s) => s.addFiles);
-  const running = useStore((s) => s.build.status === "running");
+  const running = useSelector(store, (s) => s.build.status === "running");
   const input = useRef<HTMLDivElement>(null);
   return (
     <div ref={input}>
@@ -112,16 +109,16 @@ export function AddFontsButton() {
         <PlusIcon />
         Add fonts
       </Button>
-      <FileInput onFiles={addFiles} />
+      <FileInput onFiles={store.actions.addFiles} />
     </div>
   );
 }
 
 /** Getting Pyodide and fontmint ready: a download, then starting Python. */
 export function ReadyStatus() {
-  const download = useStore((s) => s.download);
-  const manifest = useStore((s) => s.manifest);
-  const fonts = useStore((s) => s.fonts);
+  const download = useSelector(store, (s) => s.download);
+  const manifest = useSelector(store, (s) => s.manifest);
+  const fonts = useSelector(store, (s) => s.fonts);
   // One block from the first download to the last font read, the same height throughout,
   // so the page around it doesn't move until everything appears at once.
   if (!download || fonts.every((f) => f.info || f.error)) return null;

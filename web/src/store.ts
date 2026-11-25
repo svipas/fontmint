@@ -1,5 +1,5 @@
 // The page's state: dropped fonts, the form, the workers and the build.
-import { create } from "zustand";
+import { createStore } from "@tanstack/react-store";
 import { CancelledError, FontmintWorker } from "./lib/client";
 import { emptyForm, type Form, suggestedName, webOptions } from "./lib/options";
 import { automaticWorkers, runTasks, saveWorkers, secondsLeft, storedWorkers } from "./lib/pool";
@@ -42,7 +42,7 @@ export type BuildState =
   | { status: "done"; url: string; fileName: string; size: number; files: number; seconds: number }
   | { status: "failed"; error: string; user: boolean };
 
-type State = {
+export type State = {
   fonts: FontEntry[];
   form: Form;
   sample: string;
@@ -62,7 +62,9 @@ type State = {
   maxWorkers: number | null;
   /** A short note for the user, e.g. a font that was added twice. */
   notice: string | null;
+};
 
+type Actions = {
   addFiles(files: File[]): Promise<void>;
   removeFont(name: string): void;
   setForm(change: Partial<Form>): void;
@@ -78,7 +80,7 @@ type State = {
 let primary: FontmintWorker | null = null;
 let workers: FontmintWorker[] = [];
 
-function primaryWorker(set: (state: Partial<State>) => void): FontmintWorker {
+function primaryWorker(): FontmintWorker {
   // A worker that stopped by itself (it couldn't load, or crashed) is replaced.
   if (!primary || primary.stopped) {
     set({ download: { loaded: 0, total: 0 } });
@@ -88,7 +90,6 @@ function primaryWorker(set: (state: Partial<State>) => void): FontmintWorker {
   return primary;
 }
 
-/** Starts more workers, until there's one per task or as many as the build may use. */
 function growPool(tasks: number, most: number): void {
   while (workers.length < Math.min(tasks, most)) workers.push(new FontmintWorker());
 }
@@ -109,7 +110,7 @@ function listed(names: string[]): string {
 
 const warnBeforeLeaving = (event: BeforeUnloadEvent) => event.preventDefault();
 
-export const useStore = create<State>()((set, get) => ({
+const initial: State = {
   fonts: [],
   form: emptyForm,
   sample: "",
@@ -124,7 +125,11 @@ export const useStore = create<State>()((set, get) => ({
   previewMode: "live",
   maxWorkers: storedWorkers(),
   notice: null,
+};
 
+const set = (change: Partial<State>) => store.setState((state) => ({ ...state, ...change }));
+
+export const store = createStore(initial, ({ get }): Actions => ({
   async addFiles(dropped) {
     // The build's workers end with it, and would take a font still being read with them.
     if (get().build.status === "running") return;
@@ -162,7 +167,7 @@ export const useStore = create<State>()((set, get) => ({
     const guessed = orderByName(added);
     set({ fonts: [...get().fonts, ...guessed], notice: notices.filter(Boolean).join(" · ") || null });
     if (!guessed.length) return;
-    const worker = primaryWorker(set);
+    const worker = primaryWorker();
     const results = await Promise.all(
       guessed.map(async (font) => {
         const [face, described] = await Promise.all([
@@ -280,7 +285,7 @@ export const useStore = create<State>()((set, get) => ({
     };
 
     try {
-      const first = primaryWorker(set);
+      const first = primaryWorker();
       await first.ready;
       // More workers start only now, so they load Pyodide from the browser cache.
       workers = [first];

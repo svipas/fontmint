@@ -1,9 +1,10 @@
+import { useSelector } from "@tanstack/react-store";
 import { TriangleAlertIcon, XIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { familyOf, type FontEntry, useStore } from "@/store";
+import { familyOf, type FontEntry, store } from "@/store";
 import { AddFontsButton, ReadyStatus } from "./DropZone";
 import { CARD } from "./ui";
 
@@ -20,10 +21,9 @@ function summary(font: FontEntry): string {
 }
 
 export function FontList() {
-  const fonts = useStore((s) => s.fonts);
-  const removeFont = useStore((s) => s.removeFont);
-  const notice = useStore((s) => s.notice);
-  const running = useStore((s) => s.build.status === "running");
+  const fonts = useSelector(store, (s) => s.fonts);
+  const notice = useSelector(store, (s) => s.notice);
+  const running = useSelector(store, (s) => s.build.status === "running");
   const families = [...new Set(fonts.flatMap((f) => (f.info ? [familyOf(f.info)] : [])))];
 
   return (
@@ -86,7 +86,7 @@ export function FontList() {
                 variant="ghost"
                 size="icon-xs"
                 disabled={running}
-                onClick={() => removeFont(font.name)}
+                onClick={() => store.actions.removeFont(font.name)}
                 aria-label={`Remove ${font.name}`}
               >
                 <XIcon />

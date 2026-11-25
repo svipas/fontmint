@@ -1,3 +1,5 @@
+import { useDebouncedCallback } from "@tanstack/react-pacer/debouncer";
+import { useSelector } from "@tanstack/react-store";
 import {
   ArrowDownIcon,
   CheckIcon,
@@ -15,7 +17,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Progress } from "@/components/ui/progress";
 import { cliCommands, formErrors } from "@/lib/options";
 import { cn } from "@/lib/utils";
-import { type BuildState, type FontEntry, useStore } from "@/store";
+import { type BuildState, type FontEntry, store } from "@/store";
 import { CARD, duration, fileSize, INSTALL, REPO } from "./ui";
 
 const STAGES = {
@@ -26,13 +28,11 @@ const STAGES = {
 };
 
 export function BuildPanel() {
-  const fonts = useStore((s) => s.fonts);
-  const form = useStore((s) => s.form);
-  const build = useStore((s) => s.build);
-  const startBuild = useStore((s) => s.startBuild);
-  const cancelBuild = useStore((s) => s.cancelBuild);
-  const log = useStore((s) => s.log);
-  const warnings = useStore((s) => s.warnings.length);
+  const fonts = useSelector(store, (s) => s.fonts);
+  const form = useSelector(store, (s) => s.form);
+  const build = useSelector(store, (s) => s.build);
+  const log = useSelector(store, (s) => s.log);
+  const warnings = useSelector(store, (s) => s.warnings.length);
   const infos = fonts.flatMap((f) => (f.info ? [f.info] : []));
   const errors = formErrors(form, infos);
   const problems = Object.keys(errors).length;
@@ -57,11 +57,11 @@ export function BuildPanel() {
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
             {build.status === "running" ? (
-              <Button variant="outline" size="lg" onClick={cancelBuild}>
+              <Button variant="outline" size="lg" onClick={store.actions.cancelBuild}>
                 Cancel
               </Button>
             ) : (
-              <Button size="lg" className="px-5" disabled={Boolean(blocked)} onClick={startBuild}>
+              <Button size="lg" className="px-5" disabled={Boolean(blocked)} onClick={store.actions.startBuild}>
                 {build.status === "done" ? "Build again" : "Build fonts"}
               </Button>
             )}
@@ -124,7 +124,7 @@ function reveal(target: string, focus: string, block: ScrollLogicalPosition = "s
 }
 
 function Status({ build }: { build: BuildState }) {
-  const preview = useStore((s) => s.built.length > 0);
+  const preview = useSelector(store, (s) => s.built.length > 0);
   if (build.status === "running") {
     const fraction = build.stage === "building" && build.total ? build.done / build.total : null;
     return (
@@ -178,7 +178,7 @@ function Status({ build }: { build: BuildState }) {
 }
 
 function Warnings() {
-  const warnings = useStore((s) => s.warnings);
+  const warnings = useSelector(store, (s) => s.warnings);
   if (!warnings.length) return null;
   return (
     <Alert className="border-warning/40 bg-warning/5">
@@ -197,6 +197,7 @@ function Warnings() {
 
 function useCopy(): [boolean, (text: string) => Promise<void>] {
   const [copied, setCopied] = useState(false);
+  const reset = useDebouncedCallback(() => setCopied(false), { wait: 1500 });
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -204,13 +205,13 @@ function useCopy(): [boolean, (text: string) => Promise<void>] {
       return; // the browser refused (no permission): the text is still there to select
     }
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    reset();
   };
   return [copied, copy];
 }
 
 function Log() {
-  const log = useStore((s) => s.log);
+  const log = useSelector(store, (s) => s.log);
   const box = useRef<HTMLPreElement>(null);
   const following = useRef(true);
   const [copied, copy] = useCopy();
@@ -256,7 +257,7 @@ function Log() {
 }
 
 function CliCommand({ fonts }: { fonts: FontEntry[] }) {
-  const form = useStore((s) => s.form);
+  const form = useSelector(store, (s) => s.form);
   const [copied, copy] = useCopy();
   const read = fonts.filter((f) => f.info);
   if (!read.length) return null;

@@ -1,5 +1,7 @@
+import { useDebouncedValue } from "@tanstack/react-pacer/debouncer";
+import { useSelector } from "@tanstack/react-store";
 import { ArrowRightIcon, ChevronRightIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,7 +35,7 @@ import { automaticWorkers, mostWorkers } from "@/lib/pool";
 import { featureSettings, variationSettings } from "@/lib/preview";
 import type { FontInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { type FontEntry, useStore } from "@/store";
+import { type FontEntry, store } from "@/store";
 import { CARD, CliNote, FlagLabel, Section } from "./ui";
 
 const AXIS_NAMES: Record<string, [label: string, flag: string]> = {
@@ -46,10 +48,12 @@ const AXIS_NAMES: Record<string, [label: string, flag: string]> = {
 
 type ReadFont = FontEntry & { info: FontInfo };
 
+const { setForm, setMaxWorkers } = store.actions;
+
 export function Options() {
-  const fonts = useStore((s) => s.fonts).filter((f): f is ReadFont => f.info !== null);
+  const fonts = useSelector(store, (s) => s.fonts).filter((f): f is ReadFont => f.info !== null);
   const infos = fonts.map((f) => f.info);
-  const form = useStore((s) => s.form);
+  const form = useSelector(store, (s) => s.form);
   if (!infos.length) return null;
   const errors = formErrors(form, infos);
   return (
@@ -103,8 +107,7 @@ function TextField(props: {
 }
 
 function NameField({ family, error }: { family: string; error?: string }) {
-  const name = useStore((s) => s.form.name);
-  const setForm = useStore((s) => s.setForm);
+  const name = useSelector(store, (s) => s.form.name);
   // "Required" waits until the field was edited or left once; other problems show as you type.
   const [touched, setTouched] = useState(false);
   const shown = name.trim() || touched ? error : undefined;
@@ -141,36 +144,18 @@ function More({ title, set, children }: { title: string; set: boolean; children:
   );
 }
 
-const SETTLE_MS = 150;
-
-/** The preview's axis values once its sliders rest. Restyling every feature's sample on each
- * step of a slider made the sliders stutter on slower devices. */
-function useSettledPreviewAxes(): Record<string, number> {
-  const [axes, setAxes] = useState(() => useStore.getState().previewAxes);
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const unsubscribe = useStore.subscribe((state, previous) => {
-      if (state.previewAxes === previous.previewAxes) return;
-      clearTimeout(timer);
-      timer = setTimeout(() => setAxes(state.previewAxes), SETTLE_MS);
-    });
-    return () => {
-      unsubscribe();
-      clearTimeout(timer);
-    };
-  }, []);
-  return axes;
-}
-
-/** Fonts with more features than this get a search field. */
 const SEARCH_FROM = 9;
 
 function Features({ fonts }: { fonts: ReadFont[] }) {
-  const form = useStore((s) => s.form);
-  const setForm = useStore((s) => s.setForm);
+  const form = useSelector(store, (s) => s.form);
   const [query, setQuery] = useState("");
   const search = useRef<HTMLInputElement>(null);
-  const axes = useSettledPreviewAxes();
+  // Once the preview's sliders rest: restyling every feature's sample on each step of a
+  // slider made the sliders stutter on slower devices.
+  const [axes] = useDebouncedValue(
+    useSelector(store, (s) => s.previewAxes),
+    { wait: 150 },
+  );
   const infos = fonts.map((f) => f.info);
   const features = featureList(infos);
   const languages = [...new Set(infos.flatMap((info) => info.languages))].toSorted();
@@ -325,7 +310,6 @@ export function sampleCharacters(codepoints: number[]): string {
   return (letters.length ? letters : shown.slice(0, 1)).map((cp) => String.fromCodePoint(cp)).join("");
 }
 
-/** How many characters the large sample shows before "+ N more". */
 const LARGE_SAMPLE = 8;
 const SAMPLE_BOX = "inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1";
 
@@ -410,8 +394,7 @@ function Sample({ feature, fonts, axes }: { feature: Feature; fonts: ReadFont[];
 }
 
 function Spacing({ infos, errors }: { infos: FontInfo[]; errors: FormErrors }) {
-  const form = useStore((s) => s.form);
-  const setForm = useStore((s) => s.setForm);
+  const form = useSelector(store, (s) => s.form);
   const summary = [
     form.lineHeight.trim() && `line height ${form.lineHeight.trim()}`,
     form.letterSpacing.trim() && `spacing ${form.letterSpacing.trim()}`,
@@ -452,8 +435,7 @@ function Spacing({ infos, errors }: { infos: FontInfo[]; errors: FormErrors }) {
 }
 
 function Characters({ errors }: { errors: FormErrors }) {
-  const form = useStore((s) => s.form);
-  const setForm = useStore((s) => s.setForm);
+  const form = useSelector(store, (s) => s.form);
   const ranges = form.subsetRanges.trim();
   const kept = [...form.subset, ranges && "ranges"].filter(Boolean);
   const summary = kept.length > 2 ? `${kept.length} selected` : kept.join(", ");
@@ -509,10 +491,8 @@ function Characters({ errors }: { errors: FormErrors }) {
 }
 
 function Output({ infos, errors }: { infos: FontInfo[]; errors: FormErrors }) {
-  const form = useStore((s) => s.form);
-  const setForm = useStore((s) => s.setForm);
-  const maxWorkers = useStore((s) => s.maxWorkers);
-  const setMaxWorkers = useStore((s) => s.setMaxWorkers);
+  const form = useSelector(store, (s) => s.form);
+  const maxWorkers = useSelector(store, (s) => s.maxWorkers);
   const variable = infos.filter((info) => info.variable);
   const cff2 = variable.some((info) => info.cff2);
   const truetype = variable.some((info) => !info.cff2);
@@ -652,8 +632,7 @@ function Output({ infos, errors }: { infos: FontInfo[]; errors: FormErrors }) {
 }
 
 function Workers() {
-  const maxWorkers = useStore((s) => s.maxWorkers);
-  const setMaxWorkers = useStore((s) => s.setMaxWorkers);
+  const maxWorkers = useSelector(store, (s) => s.maxWorkers);
   const items = [
     { value: null, label: `Automatic (${automaticWorkers()})` },
     ...Array.from({ length: mostWorkers() }, (_, i) => ({ value: i + 1, label: String(i + 1) })),

@@ -1,3 +1,4 @@
+import { useSelector } from "@tanstack/react-store";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
@@ -5,25 +6,21 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { changedCharacters, featureSettings, metricsStyle, SAMPLE_TEXT, variationSettings } from "@/lib/preview";
 import { cn } from "@/lib/utils";
-import { defaultAxes, type PreviewMode, useStore } from "@/store";
+import { defaultAxes, type PreviewMode, store } from "@/store";
 import { CARD, ResetButton } from "./ui";
 
 const HIGHLIGHT = "fontmint-changed";
 const SIZE = 28;
 
 export function Preview() {
-  const allFonts = useStore((s) => s.fonts);
+  const allFonts = useSelector(store, (s) => s.fonts);
   const fonts = allFonts.filter((f) => f.info && f.face);
-  const form = useStore((s) => s.form);
-  const sample = useStore((s) => s.sample) || SAMPLE_TEXT;
-  const setSample = useStore((s) => s.setSample);
-  const previewAxes = useStore((s) => s.previewAxes);
-  const setPreviewAxis = useStore((s) => s.setPreviewAxis);
-  const resetPreviewAxes = useStore((s) => s.resetPreviewAxes);
-  const builtFonts = useStore((s) => s.built);
-  const builtWith = useStore((s) => s.builtWith);
-  const mode = useStore((s) => s.previewMode);
-  const setMode = useStore((s) => s.setPreviewMode);
+  const form = useSelector(store, (s) => s.form);
+  const sample = useSelector(store, (s) => s.sample) || SAMPLE_TEXT;
+  const previewAxes = useSelector(store, (s) => s.previewAxes);
+  const builtFonts = useSelector(store, (s) => s.built);
+  const builtWith = useSelector(store, (s) => s.builtWith);
+  const mode = useSelector(store, (s) => s.previewMode);
   const [selected, setSelected] = useState(0);
   const [size, setSize] = useState(SIZE);
   const [marking, setMarking] = useState(true);
@@ -106,7 +103,7 @@ export function Preview() {
               size="sm"
               spacing={0}
               value={[mode]}
-              onValueChange={(value: string[]) => value[0] && setMode(value[0] as PreviewMode)}
+              onValueChange={(value: string[]) => value[0] && store.actions.setPreviewMode(value[0] as PreviewMode)}
             >
               <ToggleGroupItem value="live">Live preview</ToggleGroupItem>
               <ToggleGroupItem value="build">Your build</ToggleGroupItem>
@@ -140,7 +137,7 @@ export function Preview() {
                 min={min}
                 max={max}
                 step={tag === "wght" || tag === "wdth" ? 1 : 0.1}
-                onChange={(value) => setPreviewAxis(tag, value)}
+                onChange={(value) => store.actions.setPreviewAxis(tag, value)}
               />
             ))}
         </div>
@@ -161,7 +158,7 @@ export function Preview() {
                 label="Reset size and axes"
                 onClick={() => {
                   setSize(SIZE);
-                  resetPreviewAxes();
+                  store.actions.resetPreviewAxes();
                   toolbar.current?.querySelector<HTMLElement>('input[type="range"]')?.focus();
                 }}
               />
@@ -207,7 +204,7 @@ export function Preview() {
             value={sample}
             rows={1}
             spellCheck={false}
-            onChange={(event) => setSample(event.target.value)}
+            onChange={(event) => store.actions.setSample(event.target.value)}
             className={`${text} relative col-start-1 row-start-1 overflow-hidden`}
             style={yours}
           />

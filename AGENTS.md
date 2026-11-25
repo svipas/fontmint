@@ -70,7 +70,7 @@ The rest of this document helps you navigate the codebase and make changes effec
 - `web/` - the website: a static React page on GitHub Pages that runs the core in Pyodide, in Web Workers.
   - `web/fontmint_web.py` - the glue the page calls: plain dicts in and out, the web's rules (never hinted, no static OTF), progress events. Tested by `tests/test_web.py` on desktop Python.
   - `web/src/pyodide/fontmint.ts` - starts Pyodide, installs the wheels, wraps the glue in a typed API. Shared by the worker (`src/worker.ts`), the smoke test and `scripts/bench.ts`.
-  - `web/src/store.ts` - the page's one zustand store: fonts, options, and the build across workers.
+  - `web/src/store.ts` - the page's one store (TanStack Store): fonts, options, and the build across workers. Components read it with `useSelector(store, …)` and change it through `store.actions`.
   - `web/src/lib/options.ts` - the form: its checks as you type, the options sent to the glue, and the matching CLI command.
   - `web/src/components/` - the page; `components/ui/` holds shadcn components (Base UI), copied in and edited.
   - `web/scripts/assets.ts` - downloads Pyodide and fontTools (checked against pinned hashes), builds the fontmint wheel, writes `public/manifest.json`.
@@ -88,14 +88,14 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 
 ## Verifying
 
-- Run `uv run python -m unittest` after every change. It takes about two seconds.
+- Run `uv run python -m unittest` after every change.
 - Run `uv run ruff format`, `uv run ruff check` and `uv run ty check` before you hand back. CI fails on any of them.
 - Behavior changes ship with focused tests in the matching `tests/test_<module>.py`. Extend an existing case where one fits before adding a new one.
 - Bug fixes get a failing test first, then the fix.
 - Build test fonts with `tests/fixtures.py`. Never commit binary font files.
 - When refactoring, prove outputs didn't change by comparing font tables before and after: [docs/testing.md](docs/testing.md).
 - For changes that touch real-world font structure (composites, overlaps, many lookups), also run a real family such as Inter once. The synthetic fixtures can't cover everything.
-- For changes in `web/` (or to `fontmint/`, which the page runs), in `web/`: `bun fmt`, `bun run lint`, `bun check`, `bun test` (unit and component tests), `bun run smoke` (fontmint in Pyodide), and `bun run build && bun run e2e` (Playwright in Chromium and Firefox). CI runs all of these on pull requests and before each deploy.
+- For changes in `web/` (or to `fontmint/`, which the page runs), in `web/`: `bun fmt`, `bun run lint`, `bun check`, `bun test` (unit and component tests), `bun run smoke` (fontmint in Pyodide), and `bun run build && bun run e2e` (Playwright in Chromium and Firefox). CI runs all of these on pull requests and before each deploy. What each covers: [docs/testing.md](docs/testing.md).
 
 ## Changing behavior
 

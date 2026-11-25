@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { transferables } from "./lib/protocol";
 import { fontInfo } from "../test/fonts";
+import { setState } from "../test/store";
 import { emptyForm } from "./lib/options";
-import { defaultAxes, type FontEntry, nameFor, orderByName, orderFonts, pickOutput, useStore } from "./store";
+import { defaultAxes, type FontEntry, nameFor, orderByName, orderFonts, pickOutput, store } from "./store";
 
 const bytes = () => new Uint8Array(1);
 
@@ -102,17 +103,17 @@ test("an axis's default comes from the first font that has it", () => {
   expect(defaultAxes(fonts)).toEqual({ wght: 400, opsz: 14 });
 });
 
-const add = (...names: string[]) => useStore.getState().addFiles(names.map((name) => new File(["text"], name)));
+const add = (...names: string[]) => store.actions.addFiles(names.map((name) => new File(["text"], name)));
 
 test("skipped files are named, the first few of them", async () => {
-  useStore.setState({ fonts: [], notice: null });
+  setState({ fonts: [], notice: null });
   await add("OFL.txt", "static");
-  expect(useStore.getState().notice).toBe("Skipped, not font files: OFL.txt, static");
+  expect(store.state.notice).toBe("Skipped, not font files: OFL.txt, static");
   await add("1", "2", "3", "4", "5", "6");
-  expect(useStore.getState().notice).toBe("Skipped, not font files: 1, 2, 3, 4, 5, 6");
+  expect(store.state.notice).toBe("Skipped, not font files: 1, 2, 3, 4, 5, 6");
   await add("1", "2", "3", "4", "5", "6", "7");
-  expect(useStore.getState().notice).toBe("Skipped, not font files: 1, 2, 3, 4, 5 and 2 more");
-  expect(useStore.getState().fonts).toEqual([]);
+  expect(store.state.notice).toBe("Skipped, not font files: 1, 2, 3, 4, 5 and 2 more");
+  expect(store.state.fonts).toEqual([]);
 });
 
 test("the name follows the fonts' suggestion until the user changes it", () => {
@@ -123,18 +124,18 @@ test("the name follows the fonts' suggestion until the user changes it", () => {
     ["Mint Sans", "Mint Sans"],
     ["", ""],
   ] as const) {
-    useStore.setState({ fonts: [inter, mono], form: { ...emptyForm, name } });
-    useStore.getState().removeFont("Inter.ttf");
-    expect(useStore.getState().form.name).toBe(left);
+    setState({ fonts: [inter, mono], form: { ...emptyForm, name } });
+    store.actions.removeFont("Inter.ttf");
+    expect(store.state.form.name).toBe(left);
   }
-  useStore.setState({
+  setState({
     fonts: [mono],
     form: { ...emptyForm, name: "JetBrains Mono Custom" },
     previewAxes: { wght: 700 },
   });
-  useStore.getState().removeFont("Mono.ttf");
-  expect(useStore.getState().form.name).toBe("");
-  expect(useStore.getState().previewAxes).toEqual({});
+  store.actions.removeFont("Mono.ttf");
+  expect(store.state.form.name).toBe("");
+  expect(store.state.previewAxes).toEqual({});
 });
 
 test("the suggested name comes from the first font read", () => {

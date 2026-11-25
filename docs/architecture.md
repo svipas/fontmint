@@ -80,7 +80,7 @@ With all three off, a run imports none of them (tested in `test_core.NativeHelpe
 `web/` is a static page on GitHub Pages that runs the same core in [Pyodide](https://pyodide.org) (CPython in WebAssembly), in Web Workers. There is no server: fonts are read, built and zipped in the browser.
 
 ```text
-page (React, zustand)  ──postMessage──▶  worker.ts ─▶ pyodide/fontmint.ts ─▶ fontmint_web.py ─▶ core
+page (React, TanStack) ──postMessage──▶  worker.ts ─▶ pyodide/fontmint.ts ─▶ fontmint_web.py ─▶ core
   lib/options.ts: form → options dict       one Pyodide per worker              describe / prepare / check_clashes /
   store.ts: workers, progress, zip URL                                          run_job / zip_files
 ```
@@ -97,7 +97,7 @@ Decisions that aren't visible in the code:
 - **The preview needs no Python.** The dropped font is loaded with the `FontFace` API and shown with CSS `font-feature-settings` and `font-variation-settings`. `describe()` lists, per feature, the characters freezing it swaps (`features.changed_characters`); the page marks them with the CSS Custom Highlight API, which paints over the text without splitting it into elements, so shaping is unchanged. After a build, the preview shows the built font itself, without CSS features.
 - **Several custom styles are several plans.** `--style-name` names one static font per run, so the page's list of styles (375 as Regular, 675 as Bold) is sent as `styles`, and the glue plans the font once per style and merges the plans (`_merge`); the core is unchanged. The copied command line is one command per style for the same reason.
 - **Checks run twice.** The page repeats fontmint's field checks so errors show as the user types (`formErrors()` in `lib/options.ts`); the core checks again when building, and its message is shown as it is. The two must change together.
-- **Tests:** `tests/test_web.py` runs the glue on desktop Python; `bun test` covers `lib/`, the store and components (workers mocked); `bun run smoke` runs `pyodide/fontmint.ts` and the glue in Pyodide under Bun; Playwright runs the production build in Chromium and Firefox. Component tests run without React Compiler; the end-to-end tests cover the compiled build.
+- **Tests:** four layers, from the glue on desktop Python to the production build in real browsers: [testing.md](testing.md).
 - **Its own releases.** The website has its own version (`web/package.json`), `web-v*` tags and changelog, so it can ship without a command-line release and the other way around. It deploys only on such a tag or by hand, never on a push to `main`, so the public page always runs released code. It runs the core at its commit, which may be ahead of the last `v*` release; `manifest.json` records both versions and the commit, and the footer shows the website's version, linked to its release notes, with the commit on hover.
 
 ## Under the hood

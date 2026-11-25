@@ -16,7 +16,7 @@ classifiers = [
     "Topic :: Text Processing :: Fonts",
 ]
 dependencies = [
-    "fonttools[woff]>=4.68",
+    "fonttools[woff]>=4.69.1",
     "ttfautohint-py>=0.6",
     "skia-pathops>=0.9",
     "cffsubr>=0.4",
@@ -31,7 +31,7 @@ Issues = "https://github.com/svipas/fontmint/issues"
 fontmint = "fontmint.cli:main"
 
 [dependency-groups]
-dev = ["ruff==0.17.6", "ty==0.0.107"]
+dev = ["ruff==0.17.6", "ty==0.0.110"]
 
 [build-system]
 requires = ["uv_build>=0.13.9,<0.14"]

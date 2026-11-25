@@ -53,6 +53,9 @@ try {
   files = await build(fonts.variable, { name: "Mint Sans", static: false, formats: ["ttf", "woff2"] });
   assert.deepEqual(folders(files), ["variable"]);
 
+  files = await build(fonts.woff2, { name: "Mint Sans" });
+  assert.deepEqual(Object.keys(files), ["MintSans/MintSans-Regular.woff2"]);
+
   files = await build(fonts.static, { features: "ss01", name: "Mint Sans", formats: ["ttf", "woff2"] });
   assert.equal(Object.keys(files).length, 1);
 

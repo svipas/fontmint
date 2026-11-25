@@ -9,6 +9,7 @@ export const FIXTURES = {
   variable: "TestSans[wght,wdth].ttf",
   italic: "TestSans-Italic[wght,wdth].ttf",
   static: "TestSans-Regular.ttf",
+  woff2: "TestSans-Regular.woff2",
 };
 
 const SCRIPT = `
@@ -20,11 +21,12 @@ folder.mkdir(parents=True, exist_ok=True)
 (folder / sys.argv[2]).write_bytes(fx.variable_ttf())
 (folder / sys.argv[3]).write_bytes(fx.variable_ttf(italic=True))
 (folder / sys.argv[4]).write_bytes(fx.static_ttf())
+(folder / sys.argv[5]).write_bytes(fx.static_woff2())
 `;
 
 /** Writes the fonts and returns their paths, keyed like FIXTURES. */
 export function writeFixtureFonts(folder: string): typeof FIXTURES {
-  execFileSync("uv", ["run", "python", "-c", SCRIPT, folder, FIXTURES.variable, FIXTURES.italic, FIXTURES.static], {
+  execFileSync("uv", ["run", "python", "-c", SCRIPT, folder, ...Object.values(FIXTURES)], {
     cwd: repo,
     stdio: "inherit",
   });
@@ -32,5 +34,6 @@ export function writeFixtureFonts(folder: string): typeof FIXTURES {
     variable: join(folder, FIXTURES.variable),
     italic: join(folder, FIXTURES.italic),
     static: join(folder, FIXTURES.static),
+    woff2: join(folder, FIXTURES.woff2),
   };
 }

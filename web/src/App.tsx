@@ -1,3 +1,4 @@
+import { useSelector } from "@tanstack/react-store";
 import type { DragEvent } from "react";
 import { BuildPanel } from "./components/BuildPanel";
 import { DropZone } from "./components/DropZone";
@@ -6,18 +7,17 @@ import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
 import { Options } from "./components/Options";
 import { Preview } from "./components/Preview";
-import { useStore } from "./store";
+import { store } from "./store";
+
+// Fonts can be dropped anywhere once the workspace is open; elsewhere the browser
+// would open the file instead.
+function onDrop(event: DragEvent) {
+  event.preventDefault();
+  if (event.dataTransfer.files.length) store.actions.addFiles([...event.dataTransfer.files]);
+}
 
 export function App() {
-  const hasFonts = useStore((s) => s.fonts.length > 0);
-  const addFiles = useStore((s) => s.addFiles);
-
-  // Fonts can be dropped anywhere once the workspace is open; elsewhere the browser
-  // would open the file instead.
-  const onDrop = (event: DragEvent) => {
-    event.preventDefault();
-    if (event.dataTransfer.files.length) addFiles([...event.dataTransfer.files]);
-  };
+  const hasFonts = useSelector(store, (s) => s.fonts.length > 0);
 
   return (
     <div className="flex min-h-dvh flex-col" onDragOver={(event) => event.preventDefault()} onDrop={onDrop}>
