@@ -3,6 +3,9 @@
 import { type Call, type Calls, type FromWorker, type ToWorker, transferables } from "./protocol";
 import { type BuildEvent, type Files, FontmintError, type ReportEntry, type WebOptions } from "./types";
 
+/** The worker's file name, filled in by build.ts. */
+declare const WORKER: string;
+
 type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => void; onEvent?: (e: BuildEvent) => void };
 
 export class FontmintWorker {
@@ -15,7 +18,7 @@ export class FontmintWorker {
   readonly ready: Promise<Calls["start"]["result"]>;
 
   constructor(onDownload?: (loaded: number, total: number) => void) {
-    this.worker = new Worker("worker.js", { type: "module" });
+    this.worker = new Worker(typeof WORKER === "undefined" ? "worker.js" : WORKER, { type: "module" });
     this.worker.addEventListener("message", ({ data }: MessageEvent<FromWorker>) => {
       if (data.type === "download") return onDownload?.(data.loaded, data.total);
       if (data.type === "crash") return this.stop(new Error(data.message));
@@ -27,23 +30,33 @@ export class FontmintWorker {
       else pending.reject(data.user ? new FontmintError(data.message) : new Error(data.message));
     });
     // A worker that dies (e.g. out of memory) fails every call still waiting.
+    let started = false;
     this.worker.addEventListener("error", (event) => {
       event.preventDefault();
       this.stop(
         new Error(
           event.message ||
-            "the build stopped unexpectedly (the browser may be out of memory: building with fewer workers needs less)",
+            (started
+              ? "the build stopped unexpectedly (the browser may be out of memory: building with fewer workers needs less)"
+              : "fontmint couldn't load. Check your connection, then reload the page."),
         ),
       );
     });
     this.ready = this.call("start", {});
     // A worker that can't start (offline, a missing file) is of no use: every call still
     // waiting fails with the reason. Callers that await `ready` see the failure too.
-    this.ready.catch((error: Error) => this.stop(error));
+    this.ready.then(
+      () => (started = true),
+      (error: Error) => this.stop(error),
+    );
   }
 
   describe(name: string, font: Uint8Array) {
     return this.call("describe", { name, font });
+  }
+
+  check(name: string, font: Uint8Array) {
+    return this.call("check", { name, font });
   }
 
   prepare(name: string, font: Uint8Array, options: WebOptions, onEvent: (e: BuildEvent) => void) {

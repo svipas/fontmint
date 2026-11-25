@@ -60,7 +60,14 @@ export function DropZone() {
         <UploadIcon className="size-8 text-primary" aria-hidden="true" />
         <p className="text-lg font-semibold">Drop font files here</p>
         <div ref={input}>
-          <Button size="lg" className="px-5" onClick={() => input.current?.querySelector("input")?.click()}>
+          <Button
+            size="lg"
+            className="px-5"
+            onClick={() => {
+              store.actions.warmUp();
+              input.current?.querySelector("input")?.click();
+            }}
+          >
             Choose fonts
           </Button>
           <FileInput onFiles={store.actions.addFiles} />

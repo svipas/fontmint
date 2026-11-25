@@ -5,6 +5,7 @@ What changed in fontmint's command line and library, per version. The website ha
 ## 0.2.1
 
 - Updated fontTools to 4.69.1, which fixes a security issue: a malicious WOFF2 file could use up all memory (GHSA-868m-5w35-h9cq).
+- `--info` and `inspect()` are faster for fonts with a lot of kerning.
 
 ## 0.2.0
 

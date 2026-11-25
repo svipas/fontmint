@@ -192,6 +192,76 @@ test("a file that isn't a font says so", async ({ page }) => {
   await expect(page.getByText("Remove the file that couldn't be read to build.")).toBeVisible();
 });
 
+test("damage the page doesn't show is found too", async ({ page }) => {
+  const damaged = join(folder, "Damaged.ttf");
+  const bytes = readFileSync(fonts.variable);
+  const entry = bytes.indexOf("gvar"); // in the table directory: tag, checksum, offset, length
+  const offset = bytes.readUInt32BE(entry + 8);
+  bytes.fill(0xff, offset, offset + bytes.readUInt32BE(entry + 12));
+  writeFileSync(damaged, bytes);
+  await addFonts(page, damaged, fonts.italic);
+  await expect(page.getByText(/Damaged.ttf: not a readable font/)).toBeVisible();
+  await expect(buildButton(page)).toBeDisabled();
+  await page.getByRole("button", { name: "Remove Damaged.ttf" }).click();
+  await expect(buildButton(page)).toBeEnabled();
+});
+
+test("Python starts with the page", async ({ page }) => {
+  await Promise.all([page.waitForRequest("**/pyodide/python-*.zip"), page.goto("./")]);
+});
+
+for (const [device, pretend] of [
+  ["a browser that saves data", "Object.defineProperty(navigator, 'connection', { get: () => ({ saveData: true }) })"],
+  [
+    "a phone",
+    `const real = window.matchMedia;
+    window.matchMedia = (query) => (query === "(pointer: coarse)" ? { matches: true } : real.call(window, query));`,
+  ],
+] as const)
+  test(`Python waits for "Choose fonts" on ${device}`, async ({ page }) => {
+    await page.addInitScript(pretend);
+    await page.goto("./");
+    const choose = page.getByRole("button", { name: "Choose fonts" });
+    await expect(choose).toBeVisible();
+    expect(page.workers()).toHaveLength(0);
+
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser"),
+      page.waitForRequest("**/pyodide/python-*.zip"),
+      choose.click(),
+    ]);
+    await chooser.setFiles(fonts.variable);
+    await expect(nameField(page)).toHaveValue("Test Sans Custom");
+  });
+
+test("a worker that isn't there says to reload the page", async ({ page }) => {
+  await page.route("**/worker-*.js", (route) => route.fulfill({ status: 404 }));
+  await addFonts(page, fonts.variable);
+  await expect(page.getByText(/fontmint couldn't load.*reload the page/)).toBeVisible();
+});
+
+test("a download that fails doesn't leave the font waiting, and the next one tries again", async ({ page }) => {
+  for (const file of ["pyodide.asm.wasm", "python-*.zip", "brotli-*.whl"]) {
+    // Late, when Pyodide already waits for the file.
+    await page.route(`**/${file}`, async (route) => {
+      await page.waitForTimeout(1000);
+      await route.abort();
+    });
+    await addFonts(page, fonts.variable);
+    await expect(page.getByText(/fontmint couldn't load/)).toBeVisible();
+    await page.unroute(`**/${file}`);
+    await page.getByRole("button", { name: "Remove TestSans" }).click();
+    await page.locator('input[type="file"]').setInputFiles(fonts.variable);
+    await expect(nameField(page)).toHaveValue("Test Sans Custom");
+  }
+});
+
+test("a .wasm file that can't run doesn't leave the font waiting", async ({ page }) => {
+  await page.route("**/pyodide.asm.wasm", (route) => route.fulfill({ contentType: "application/wasm", body: "?" }));
+  await addFonts(page, fonts.variable);
+  await expect(page.getByText(/fontmint couldn't load/)).toBeVisible();
+});
+
 test("a dropped file is added once", async ({ page }) => {
   await page.goto("./");
   // The drop area sits inside the page, which takes drops too.

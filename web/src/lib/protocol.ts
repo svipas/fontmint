@@ -5,6 +5,7 @@ import type { BuildEvent, Files, FontInfo, Manifest, Plan, ReportEntry, WebOptio
 export type Calls = {
   start: { args: Record<string, never>; result: Manifest };
   describe: { args: { name: string; font: Uint8Array }; result: FontInfo };
+  check: { args: { name: string; font: Uint8Array }; result: null };
   prepare: { args: { name: string; font: Uint8Array; options: WebOptions }; result: Plan };
   checkClashes: { args: { outputs: string[][] }; result: null };
   runJob: { args: { name: string; job: Uint8Array; source: Uint8Array }; result: Files };

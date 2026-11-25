@@ -43,9 +43,9 @@ bun run e2e --project chromium -g 'cancelled'
 | `bun run smoke` | `src/pyodide/fontmint.ts` and the glue: what builds without the native helpers | Pyodide under Bun              |
 | `bun run e2e`   | the production build: whole builds, workers, cancelling, crashes, page layout  | Playwright: Chromium + Firefox |
 
-- `smoke` and `e2e` run the fontmint wheel that `bun run assets` built, and `e2e` the page that `bun run build` built: run them again after a change, or the old code is tested.
+- `smoke` and `e2e` run the fontmint that `bun run assets` built, and `e2e` the page that `bun run build` built: run them again after a change, or the old code is tested.
 - `e2e` uses a server already running on port 4173 (`bun run serve`), which may be another checkout's. It needs Playwright's browsers, once per Playwright version: `bunx playwright install chromium firefox`.
-- `bun test` never starts a worker, so `lib/client.ts`, `worker.ts`, and reading and building fonts in the store are only covered by `e2e`; it also runs the components without React Compiler, which the production build uses.
+- `bun test` never starts a real worker (`store.test.ts` answers the page's calls itself), so `worker.ts` and building fonts in the store are only covered by `e2e`; it also runs the components without React Compiler, which the production build uses.
 - `test/store.ts` puts the store into a known state. Component tests call its `resetStore` before each test, as they all share the one store.
 
 ## Fixtures

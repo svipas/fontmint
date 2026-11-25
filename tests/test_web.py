@@ -56,6 +56,22 @@ class DescribeTest(unittest.TestCase):
         with self.assertRaisesRegex(FontmintError, "^Broken.ttf: not a readable font"):
             web.describe("Broken.ttf", b"not a font")
 
+    def test_damage_is_found_even_in_tables_the_page_does_not_show(self):
+        font = fx.open_font(fx.variable_ttf())
+        damaged = {}
+        for tag in ("gvar", "GSUB"):
+            entry = font.reader.tables[tag]
+            data = bytearray(fx.variable_ttf())
+            data[entry.offset : entry.offset + entry.length] = b"\xff" * entry.length
+            damaged[tag] = bytes(data)
+
+        self.assertEqual(web.describe("TestSans.ttf", damaged["gvar"])["family"], "Test Sans")
+        with self.assertRaisesRegex(FontmintError, "^TestSans.ttf: not a readable font"):
+            web.check("TestSans.ttf", damaged["gvar"])
+        with self.assertRaisesRegex(FontmintError, "^TestSans.ttf: not a readable font"):
+            web.describe("TestSans.ttf", damaged["GSUB"])
+        web.check("TestSans.ttf", fx.variable_ttf())
+
 
 class VariableBuildTest(unittest.TestCase):
     def test_default_build_is_unhinted_ttf_and_woff2(self):

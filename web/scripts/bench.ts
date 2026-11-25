@@ -17,7 +17,7 @@ const print = (event: BuildEvent) =>
   );
 
 let started = performance.now();
-const fontmint = await loadFontmint(pub, (path) => Bun.file(pub + path).bytes());
+const fontmint = await loadFontmint(pub, await Bun.file(`${pub}manifest.json`).json());
 console.log(
   `Pyodide ${fontmint.manifest.pyodide} + fontmint ${fontmint.manifest.fontmint} ready in ${seconds(started)}`,
 );

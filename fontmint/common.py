@@ -16,11 +16,13 @@ class FontmintError(Exception):
 REQUIRED_TABLES = ("head", "name", "cmap", "maxp", "hmtx", "post", "OS/2")
 
 
-def load(font_bytes: bytes, recalc: bool = True, check: bool = True) -> TTFont:
+def load(font_bytes: bytes, recalc: bool = True, check: bool = True, lazy: bool | None = None) -> TTFont:
     """Open a font from bytes. recalc=False keeps bounding boxes and timestamps
     exactly as stored (used when a font should pass through unchanged).
     check=True decompiles every table once up front, so a damaged file fails here
-    with a clear error instead of somewhere later (fontTools reads tables lazily)."""
+    with a clear error instead of somewhere later (fontTools reads tables lazily).
+    lazy=True reads only what is looked at, also inside a table (a large GPOS takes most
+    of the time otherwise); only for a font that isn't changed."""
     if font_bytes[:4] == b"ttcf":
         raise FontmintError("font collections (.ttc) aren't supported; extract the fonts first")
     try:
@@ -31,7 +33,7 @@ def load(font_bytes: bytes, recalc: bool = True, check: bool = True) -> TTFont:
             if missing := [t for t in REQUIRED_TABLES if t not in probe]:
                 raise FontmintError(f"missing required table(s): {', '.join(missing)}")
             probe.ensureDecompiled()
-        return TTFont(io.BytesIO(font_bytes), recalcBBoxes=recalc, recalcTimestamp=recalc)
+        return TTFont(io.BytesIO(font_bytes), recalcBBoxes=recalc, recalcTimestamp=recalc, lazy=lazy)
     except FontmintError as e:
         raise FontmintError(f"not a usable font: {e}") from e
     except Exception as e:

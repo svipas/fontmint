@@ -4,6 +4,12 @@ What changed on [svipas.github.io/fontmint](https://svipas.github.io/fontmint), 
 
 ## 0.4.0
 
+- Your fonts show up almost as soon as you add them: Python starts while you're still on the start page, starts several times faster, and reads a font in a fraction of the time (Inter upright and italic: about 0.1 seconds instead of 5).
+- Phones, tablets and browsers set to save data download fontmint only once you tap _Choose fonts_ or add a font.
+- When a download breaks off or your browser can't run Python, the page says so, instead of leaving your font at "Reading font…" or calling a good WOFF2 file damaged.
+- A font added under the name of one you just removed no longer gets the removed one's details.
+- Opening the page right after an update no longer mixes its files with older ones your browser kept.
+- Faster builds (Inter: about 15%).
 - A malicious WOFF2 file can no longer use up the browser's memory.
 - Copying the log or command again keeps its "Copied" up for the full time.
 

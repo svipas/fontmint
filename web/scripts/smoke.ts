@@ -1,7 +1,6 @@
 // Smoke test: fontmint in Pyodide, from the site's own files in public/ (bun run assets),
 // through the same module the page's workers use. Pyodide has none of fontmint's native
-// helpers (ttfautohint, skia-pathops, cffsubr) and the wheel is installed without
-// dependencies, so a build that reached one would fail here.
+// helpers (ttfautohint, skia-pathops, cffsubr), so a build that reached one would fail here.
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -17,7 +16,7 @@ const folders = (files: Files) => [...new Set(Object.keys(files).map((path) => p
 const folder = await mkdtemp(join(tmpdir(), "fontmint-smoke-"));
 try {
   const fonts = writeFixtureFonts(folder);
-  const fontmint = await loadFontmint(pub, (path) => Bun.file(pub + path).bytes());
+  const fontmint = await loadFontmint(pub, await Bun.file(`${pub}manifest.json`).json());
   let plan: Plan;
   const build = async (path: string, options: WebOptions): Promise<Files> => {
     const name = path.split("/").pop()!;
@@ -36,6 +35,10 @@ try {
   let files = await build(fonts.variable, { features: "ss01", name: "Mint Sans", formats: ["ttf", "woff2"] });
   assert.deepEqual(folders(files), ["ttf-unhinted", "variable", "woff2-unhinted"]);
   assert.equal(Object.keys(files).length, 2 + 4 * 2);
+
+  const [woff2, data] = Object.entries(files).find(([path]) => path.endsWith(".woff2"))!;
+  assert.equal(fontmint.describe(woff2, data).family, "Mint Sans");
+  fontmint.check(woff2, data);
 
   files = await build(fonts.variable, { name: "Mint Sans", axes: { wght: "300:700" }, formats: ["woff2"] });
   assert.deepEqual(folders(files), ["variable"]);

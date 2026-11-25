@@ -1,8 +1,10 @@
-// Puts everything the worker loads at runtime into public/: the Pyodide core and the
-// packages fontmint needs, the pinned fontTools wheel and a freshly built fontmint
-// wheel. The site serves these itself; no CDN or PyPI request happens in the browser.
+// Puts everything the worker loads at runtime into public/: the Pyodide core with the
+// package fontmint needs, and all Python code (the standard library, the pinned fontTools
+// and a freshly built fontmint) compiled into one zip. The site serves these itself; no
+// CDN or PyPI request happens in the browser.
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import bundleSource from "./bundle.py" with { type: "text" };
 
 const PYODIDE = "314.0.8";
 const PYODIDE_CORE = {
@@ -10,7 +12,7 @@ const PYODIDE_CORE = {
   sha256: "ff3e5f9d9bc8e98ff30b99515535fc24d375994f47a978c61975d653e162ca37",
 };
 const PYODIDE_FILES = ["pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"];
-const PYODIDE_PACKAGES = ["micropip", "brotli"];
+const PYODIDE_PACKAGES = ["brotli"];
 // Pyodide's own fontTools is too old for fontmint, so a newer pure-Python wheel is pinned.
 const FONTTOOLS = {
   file: "fonttools-4.69.1-py3-none-any.whl",
@@ -22,6 +24,7 @@ const web = join(import.meta.dir, "..");
 const repo = join(web, "..");
 const cache = join(web, ".cache");
 const pub = join(web, "public");
+const core = join(pub, "pyodide", PYODIDE);
 
 async function download(url: string, sha256: string, path: string): Promise<Uint8Array> {
   const cached = Bun.file(path);
@@ -44,30 +47,19 @@ async function run(cmd: string[], cwd: string): Promise<void> {
 }
 
 await rm(join(pub, "pyodide"), { recursive: true, force: true });
-await rm(join(pub, "wheels"), { recursive: true, force: true });
-await mkdir(join(pub, "pyodide"), { recursive: true });
-await mkdir(join(pub, "wheels"), { recursive: true });
+await mkdir(core, { recursive: true });
 
 const archive = join(cache, `pyodide-core-${PYODIDE}.tar.bz2`);
 await download(PYODIDE_CORE.url, PYODIDE_CORE.sha256, archive);
 await run(
-  [
-    "tar",
-    "-xjf",
-    archive,
-    "--strip-components=1",
-    "-C",
-    join(pub, "pyodide"),
-    ...PYODIDE_FILES.map((f) => `pyodide/${f}`),
-  ],
+  ["tar", "-xjf", archive, "--strip-components=1", "-C", core, ...PYODIDE_FILES.map((f) => `pyodide/${f}`)],
   web,
 );
 
 // Pyodide packages and their dependencies, checked against the lock file's hashes
 type LockPackage = { file_name: string; sha256: string; depends: string[] };
-const lock: { packages: Record<string, LockPackage> } = await Bun.file(
-  join(pub, "pyodide", "pyodide-lock.json"),
-).json();
+const lockFile = Bun.file(join(core, "pyodide-lock.json"));
+const lock: { packages: Record<string, LockPackage> } = await lockFile.json();
 const needed = new Set<string>();
 const visit = (name: string) => {
   if (needed.has(name)) return;
@@ -84,23 +76,45 @@ for (const name of needed) {
     sha256,
     join(cache, file_name),
   );
-  await Bun.write(join(pub, "pyodide", file_name), data);
+  await Bun.write(join(core, file_name), data);
 }
+lock.packages = Object.fromEntries([...needed].map((name) => [name, lock.packages[name]!]));
+await Bun.write(lockFile, JSON.stringify(lock));
 
-await Bun.write(
-  join(pub, "wheels", FONTTOOLS.file),
-  await download(FONTTOOLS.url, FONTTOOLS.sha256, join(cache, FONTTOOLS.file)),
-);
-await run(["uv", "build", "--quiet", "--wheel", "--no-create-gitignore", "--out-dir", join(pub, "wheels")], repo);
-const fontmintWheel = [...new Bun.Glob("fontmint-*.whl").scanSync(join(pub, "wheels"))][0];
+const wheels = join(cache, "wheels");
+await rm(wheels, { recursive: true, force: true });
+await run(["uv", "build", "--quiet", "--wheel", "--no-create-gitignore", "--out-dir", wheels], repo);
+const fontmintWheel = [...new Bun.Glob("fontmint-*.whl").scanSync(wheels)][0];
 if (!fontmintWheel) throw new Error("the fontmint wheel wasn't built");
+
+const stdlib = join(core, "python_stdlib.zip");
+const { loadPyodide }: typeof import("pyodide") = await import(join(core, "pyodide.mjs"));
+const pyodide = await loadPyodide({
+  indexURL: `${core}/`,
+  env: { PYTHONNODEBUGRANGES: "1" }, // smaller: no column numbers for tracebacks
+});
+const archives = {
+  "stdlib.zip": await Bun.file(stdlib).bytes(),
+  [FONTTOOLS.file]: await download(FONTTOOLS.url, FONTTOOLS.sha256, join(cache, FONTTOOLS.file)),
+  [fontmintWheel]: await Bun.file(join(wheels, fontmintWheel)).bytes(),
+};
+for (const [name, data] of Object.entries(archives)) pyodide.FS.writeFile(`/tmp/${name}`, data);
+pyodide.FS.writeFile("/home/pyodide/bundle.py", bundleSource);
+pyodide.pyimport("bundle").bundle(
+  Object.keys(archives).map((name) => `/tmp/${name}`),
+  "/tmp/python.zip",
+);
+const bundled: Uint8Array = pyodide.FS.readFile("/tmp/python.zip");
+await rm(stdlib);
+const python = `pyodide/python-${hash(bundled).slice(0, 8)}.zip`;
+await Bun.write(join(pub, python), bundled);
 
 // What a worker fetches while starting (the page's download progress); Pyodide's two
 // .mjs files are loaded with import(), which can't be counted.
 const fetched = [
-  ...["pyodide-lock.json", "pyodide.asm.wasm", "python_stdlib.zip"].map((f) => `pyodide/${f}`),
-  ...[...needed].map((name) => `pyodide/${lock.packages[name]!.file_name}`),
-  ...[FONTTOOLS.file, fontmintWheel].map((f) => `wheels/${f}`),
+  ...["pyodide-lock.json", "pyodide.asm.wasm"].map((f) => `pyodide/${PYODIDE}/${f}`),
+  python,
+  ...[...needed].map((name) => `pyodide/${PYODIDE}/${lock.packages[name]!.file_name}`),
 ];
 const commit = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"], { cwd: repo }).stdout.toString().trim();
 const manifest = {
@@ -109,8 +123,8 @@ const manifest = {
   pyodide: PYODIDE,
   fontmint: fontmintWheel.split("-")[1],
   commit,
-  wheels: [FONTTOOLS.file, fontmintWheel],
+  python,
   downloads: Object.fromEntries(fetched.map((path) => [path, Bun.file(join(pub, path)).size])),
 };
 await Bun.write(join(pub, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
-console.log(`public/: Pyodide ${PYODIDE} (${[...needed].join(", ")}), ${manifest.wheels.join(", ")}`);
+console.log(`public/: Pyodide ${PYODIDE} (${[...needed].join(", ")}), ${FONTTOOLS.file}, ${fontmintWheel}`);

@@ -1,4 +1,4 @@
-// Starts Pyodide, installs fontmint from the site's own files, and wraps the glue
+// Starts Pyodide with fontmint from the site's own files, and wraps the glue
 // module (web/fontmint_web.py) in a typed API. Shared by the page's worker and the
 // smoke test, so both run fontmint exactly the same way.
 import type { PyodideAPI } from "pyodide";
@@ -18,13 +18,12 @@ import {
 
 export * from "../lib/types";
 
-/** Reads a file of the site: fetch() in the browser, the file system in tests. */
-type ReadFile = (path: string) => Promise<Uint8Array>;
-
 export type Fontmint = {
   manifest: Manifest;
   describe(name: string, font: Uint8Array): FontInfo;
-  /** Plans one font that describe() has read; any worker can run its jobs. */
+  /** Throws if the font is damaged anywhere, also where describe() doesn't look. */
+  check(name: string, font: Uint8Array): void;
+  /** Plans one font that passed check(); any worker can run its jobs. */
   prepare(name: string, font: Uint8Array, options: WebOptions, report: (event: BuildEvent) => void): Plan;
   /** Throws if two inputs (each one's prepare() paths) would write the same file. */
   checkClashes(outputs: string[][]): void;
@@ -32,23 +31,17 @@ export type Fontmint = {
   zipFiles(files: Files, entries: ReportEntry[], report: (event: BuildEvent) => void): Uint8Array;
 };
 
-/** `base` is the URL (browser) or folder (tests) holding pyodide/, wheels/ and manifest.json. */
-export async function loadFontmint(base: string, read: ReadFile): Promise<Fontmint> {
-  const manifest: Manifest = JSON.parse(new TextDecoder().decode(await read("manifest.json")));
-  const { loadPyodide }: typeof import("pyodide") = await import(`${base}pyodide/pyodide.mjs`);
-  const pyodide = await loadPyodide({ indexURL: `${base}pyodide/`, packages: ["micropip", "brotli"] });
-  // Wheels are written into Pyodide's file system and installed from there, without
-  // dependency resolution: everything fontmint needs is already in place, and micropip
-  // must not look anything up on PyPI.
-  pyodide.FS.mkdirTree("/wheels");
-  for (const wheel of manifest.wheels) pyodide.FS.writeFile(`/wheels/${wheel}`, await read(`wheels/${wheel}`));
-  const micropip = pyodide.pyimport("micropip");
-  await micropip.install.callKwargs(
-    manifest.wheels.map((wheel) => `emfs:/wheels/${wheel}`),
-    { deps: false },
-  );
-  micropip.destroy();
-  // The glue module isn't part of the fontmint wheel; it's bundled into the worker as text.
+/** `base` is the URL (browser) or folder (tests) holding pyodide/. */
+export async function loadFontmint(base: string, manifest: Manifest): Promise<Fontmint> {
+  const indexURL = `${base}pyodide/${manifest.pyodide}/`;
+  const { loadPyodide }: typeof import("pyodide") = await import(`${indexURL}pyodide.mjs`);
+  const pyodide = await loadPyodide({
+    indexURL,
+    // Has fontTools and fontmint too.
+    stdLibURL: base + manifest.python,
+    packages: ["brotli"],
+  });
+  // The glue module isn't part of the zip; it's bundled into the worker as text.
   pyodide.FS.writeFile("/home/pyodide/fontmint_web.py", glueSource);
   return wrap(pyodide, pyodide.pyimport("fontmint_web"), manifest);
 }
@@ -60,11 +53,11 @@ const reporter = (report: (event: BuildEvent) => void) => (event: Convertible) =
   report(event.toJs({ dict_converter: Object.fromEntries }) as BuildEvent);
 
 function wrap(pyodide: PyodideAPI, web: PyProxy & Record<string, Function>, manifest: Manifest): Fontmint {
-  /** Calls into Python: converts the result, frees `owned` (arguments made with toPy) and
-   * turns a FontmintError into a plain message. */
-  const call = <T>(fn: () => unknown, ...owned: PyProxy[]): T => {
+  const call = <T>(fn: Function, ...args: unknown[]): T => {
+    // Bytes too: otherwise Python reads them one number at a time (0.6 s for 4 MB).
+    const pyArgs = args.map((arg) => (typeof arg === "object" ? pyodide.toPy(arg) : arg));
     try {
-      const result = fn();
+      const result = fn(...pyArgs);
       if (!(result instanceof pyodide.ffi.PyProxy)) return result as T;
       const converted = (result as Convertible).toJs({ dict_converter: Object.fromEntries });
       result.destroy();
@@ -72,28 +65,22 @@ function wrap(pyodide: PyodideAPI, web: PyProxy & Record<string, Function>, mani
     } catch (error) {
       throw userError(error);
     } finally {
-      for (const proxy of owned) proxy.destroy();
+      for (const arg of pyArgs) if (arg instanceof pyodide.ffi.PyProxy) arg.destroy();
     }
   };
 
   return {
     manifest,
-    describe: (name, font) => call(() => web.describe!(name, font)),
+    describe: (name, font) => call(web.describe!, name, font),
+    check: (name, font) => call(web.check!, name, font),
     prepare: (name, font, options, report) => {
       // toPy() turns null into JsNull, not None: leave unset options out instead.
-      const pyOptions = pyodide.toPy(Object.fromEntries(Object.entries(options).filter(([, v]) => v != null)));
-      return call(() => web.prepare!(name, font, pyOptions, reporter(report)), pyOptions);
+      const set = Object.fromEntries(Object.entries(options).filter(([, v]) => v != null));
+      return call(web.prepare!, name, font, set, reporter(report));
     },
-    checkClashes: (outputs) => {
-      const pyOutputs = pyodide.toPy(outputs);
-      call(() => web.check_clashes!(pyOutputs), pyOutputs);
-    },
-    runJob: (name, job, source, report) => call(() => web.run_job!(name, job, source, reporter(report))),
-    zipFiles: (files, entries, report) => {
-      const pyFiles = pyodide.toPy(files);
-      const pyEntries = pyodide.toPy(entries);
-      return call(() => web.zip_files!(pyFiles, pyEntries, manifest.site, reporter(report)), pyFiles, pyEntries);
-    },
+    checkClashes: (outputs) => call(web.check_clashes!, outputs),
+    runJob: (name, job, source, report) => call(web.run_job!, name, job, source, reporter(report)),
+    zipFiles: (files, entries, report) => call(web.zip_files!, files, entries, manifest.site, reporter(report)),
   };
 }
 

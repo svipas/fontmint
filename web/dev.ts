@@ -12,7 +12,11 @@ const server = Bun.serve({
   routes: {
     "/": index,
     "/worker.js": async () => {
-      const build = await Bun.build({ entrypoints: ["./src/worker.ts"], target: "browser" });
+      const build = await Bun.build({
+        entrypoints: ["./src/worker.ts"],
+        target: "browser",
+        define: { MANIFEST: await Bun.file(join(pub, "manifest.json")).text() },
+      });
       if (!build.success) return new Response(build.logs.join("\n"), { status: 500 });
       return new Response(build.outputs[0], { headers: { "Content-Type": "text/javascript" } });
     },

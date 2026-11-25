@@ -8,7 +8,7 @@ export type Manifest = {
   fontmint: string;
   /** Short git commit the site was built from. */
   commit: string;
-  wheels: string[];
+  python: string;
   /** Bytes of every file a worker fetches while starting, for download progress. */
   downloads: Record<string, number>;
 };

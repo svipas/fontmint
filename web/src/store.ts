@@ -65,6 +65,7 @@ export type State = {
 };
 
 type Actions = {
+  warmUp(): void;
   addFiles(files: File[]): Promise<void>;
   removeFont(name: string): void;
   setForm(change: Partial<Form>): void;
@@ -88,6 +89,46 @@ function primaryWorker(): FontmintWorker {
     primary.ready.then((manifest) => set({ manifest })).catch(() => {});
   }
   return primary;
+}
+
+const checks = new WeakMap<Uint8Array, Promise<unknown>>();
+
+function checkFont(worker: FontmintWorker, { name, bytes }: FontEntry): Promise<unknown> {
+  const started = checks.get(bytes);
+  if (started) return started;
+  const check = worker.check(name, bytes);
+  checks.set(bytes, check);
+  check.catch((error: Error) => {
+    if (!(error instanceof FontmintError)) return checks.delete(bytes);
+    const { fonts: before, form } = store.state;
+    const fonts = orderFonts(before.map((f) => (f.bytes === bytes ? { ...f, info: null, error: error.message } : f)));
+    set({ fonts, form: followName(form, before, fonts) });
+  });
+  return check;
+}
+
+function nextToCheck(): FontEntry | undefined {
+  const { fonts, build } = store.state;
+  return build.status === "running" ? undefined : fonts.find((f) => f.info && !checks.has(f.bytes));
+}
+
+let checking = false;
+
+/** One at a time, so a font added meanwhile is read before the rest are checked. A build checks
+ * what this doesn't get to. */
+async function checkFonts(worker: FontmintWorker): Promise<void> {
+  if (checking) return;
+  checking = true;
+  try {
+    for (let font = nextToCheck(); font; font = nextToCheck())
+      await checkFont(worker, font).catch((error: Error) => {
+        if (!(error instanceof FontmintError)) throw error;
+      });
+  } catch {
+    // The worker stopped; no other is started just for this.
+  } finally {
+    checking = false;
+  }
 }
 
 function growPool(tasks: number, most: number): void {
@@ -130,6 +171,10 @@ const initial: State = {
 const set = (change: Partial<State>) => store.setState((state) => ({ ...state, ...change }));
 
 export const store = createStore(initial, ({ get }): Actions => ({
+  warmUp() {
+    primaryWorker();
+  },
+
   async addFiles(dropped) {
     // The build's workers end with it, and would take a font still being read with them.
     if (get().build.status === "running") return;
@@ -178,17 +223,19 @@ export const store = createStore(initial, ({ get }): Actions => ({
             (error: Error) => ({ info: null, error: error instanceof CancelledError ? null : error.message }),
           ),
         ]);
-        return [font.name, { face, ...described }] as const;
+        return [font.bytes, { face, ...described }] as const;
       }),
     );
-    // All of them at once, in their final order: the page changes once, not once per font.
+    // All of them at once, in their final order: the page changes once, not once per font. By
+    // bytes, as another font can have been added under the name of one that's removed.
     const done = new Map(results);
-    const fonts = orderFonts(get().fonts.map((f) => (done.has(f.name) ? { ...f, ...done.get(f.name) } : f)));
+    const fonts = orderFonts(get().fonts.map((f) => (done.has(f.bytes) ? { ...f, ...done.get(f.bytes) } : f)));
     set({
       fonts,
       previewAxes: { ...defaultAxes(fonts), ...get().previewAxes },
       form: followName(get().form, get().fonts, fonts),
     });
+    void checkFonts(worker);
   },
 
   removeFont(name) {
@@ -296,6 +343,7 @@ export const store = createStore(initial, ({ get }): Actions => ({
       await runTasks(
         workers,
         fonts.map((font) => async (worker) => {
+          await checkFont(worker, font);
           plans.set(font.name, await worker.prepare(font.name, font.bytes, webOptions(form, font.info), onEvent));
         }),
       );

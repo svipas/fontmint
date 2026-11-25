@@ -75,7 +75,11 @@ export function FontList() {
                     </div>
                   </>
                 )}
-                {font.error && <p className="text-xs text-destructive">{font.error}</p>}
+                {font.error && (
+                  <p role="alert" className="text-xs text-destructive">
+                    {font.error}
+                  </p>
+                )}
                 {font.info && !font.face && (
                   <p className="text-xs text-muted-foreground">
                     Your browser can&apos;t display this font, so there&apos;s no preview.

@@ -1,7 +1,7 @@
-import { expect, test } from "bun:test";
-import { transferables } from "./lib/protocol";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { type Call, transferables } from "./lib/protocol";
 import { fontInfo } from "../test/fonts";
-import { setState } from "../test/store";
+import { resetStore, setState } from "../test/store";
 import { emptyForm } from "./lib/options";
 import { defaultAxes, type FontEntry, nameFor, orderByName, orderFonts, pickOutput, store } from "./store";
 
@@ -141,4 +141,136 @@ test("the name follows the fonts' suggestion until the user changes it", () => {
 test("the suggested name comes from the first font read", () => {
   expect(nameFor([font("A.ttf", null), font("B.ttf", fontInfo({ family: "Inter Variable" }))])).toBe("Inter Custom");
   expect(nameFor([font("A.ttf", null)])).toBe("");
+});
+
+type Message = { id: number; call: Call; name?: string };
+
+class FakeWorker extends EventTarget {
+  waiting: Message[] = [];
+  constructor() {
+    super();
+    started.push(this);
+  }
+  postMessage(message: Message) {
+    this.waiting.push(message);
+  }
+  terminate() {}
+  answer(message: Message, answer: object) {
+    this.waiting.splice(this.waiting.indexOf(message), 1);
+    this.dispatchEvent(new MessageEvent("message", { data: { id: message.id, ...answer } }));
+  }
+  async answerAll() {
+    const others = () => this.waiting.filter(({ call }) => call !== "check");
+    for (let calls = others(); calls.length; calls = others()) {
+      for (const call of calls) this.answer(call, { type: "result", value: fontInfo({ family: call.name }) });
+      await Bun.sleep(0);
+    }
+  }
+  async answerCheck(damage?: string) {
+    const check = this.waiting.find(({ call }) => call === "check")!;
+    this.answer(check, damage ? { type: "error", message: damage, user: true } : { type: "result", value: null });
+    await Bun.sleep(0);
+  }
+  async crash() {
+    this.dispatchEvent(new MessageEvent("message", { data: { type: "crash", message: "out of memory" } }));
+    await Bun.sleep(0);
+  }
+  get checking() {
+    return this.waiting.filter(({ call }) => call === "check").map(({ name }) => name);
+  }
+}
+
+let started: FakeWorker[] = [];
+
+async function until(ready: () => boolean | undefined) {
+  while (!ready()) await Bun.sleep(1);
+}
+
+async function read(...names: string[]): Promise<FakeWorker> {
+  void add(...names);
+  await until(() => started.at(-1)?.waiting.some(({ call }) => call === "describe"));
+  await started.at(-1)!.answerAll();
+  const shown = () => store.state.fonts.filter((f) => f.info && names.includes(f.name));
+  await until(() => shown().length === names.length);
+  return started.at(-1)!;
+}
+
+const listed = () => store.state.fonts.map((f) => [f.name, f.error]);
+
+describe("reading fonts and checking them for damage", () => {
+  const realWorker = globalThis.Worker;
+
+  beforeEach(() => {
+    started = [];
+    globalThis.Worker = FakeWorker as unknown as typeof Worker;
+  });
+  afterEach(() => {
+    store.actions.cancelBuild();
+    resetStore();
+    globalThis.Worker = realWorker;
+  });
+
+  test("a font added under a removed one's name doesn't get the details of the removed one", async () => {
+    const describes = () => started[0]?.waiting.filter(({ call }) => call === "describe") ?? [];
+    void add("A.ttf");
+    await until(() => describes().length === 1);
+    store.actions.removeFont("A.ttf");
+    void add("A.ttf");
+    await until(() => describes().length === 2);
+    started[0]!.answer(describes()[0]!, { type: "result", value: fontInfo({ family: "Removed" }) });
+    await Bun.sleep(5);
+    expect(store.state.fonts[0]!.info).toBeNull();
+    await started[0]!.answerAll();
+    await until(() => store.state.fonts[0]!.info?.family === "A.ttf");
+  });
+
+  test("one font at a time, also when more are added", async () => {
+    const worker = await read("A.ttf", "B.ttf");
+    await read("C.ttf");
+    for (const name of ["A.ttf", "B.ttf", "C.ttf"]) {
+      expect(worker.checking).toEqual([name]);
+      await worker.answerCheck();
+    }
+    expect(worker.checking).toEqual([]);
+  });
+
+  test("a font removed meanwhile isn't checked", async () => {
+    const worker = await read("A.ttf", "B.ttf", "C.ttf");
+    store.actions.removeFont("B.ttf");
+    await worker.answerCheck();
+    expect(worker.checking).toEqual(["C.ttf"]);
+  });
+
+  test("a damaged font is listed with the error, and the name follows the rest", async () => {
+    const worker = await read("A.ttf", "B.ttf");
+    expect(store.state.form.name).toBe("A.ttf Custom");
+    await worker.answerCheck("A.ttf: not a readable font");
+    expect(listed()).toEqual([
+      ["B.ttf", null],
+      ["A.ttf", "A.ttf: not a readable font"],
+    ]);
+    expect(store.state.form.name).toBe("B.ttf Custom");
+    expect(worker.checking).toEqual(["B.ttf"]);
+  });
+
+  test("a worker that stops isn't replaced just to go on", async () => {
+    const worker = await read("A.ttf", "B.ttf");
+    await worker.crash();
+    expect(started).toHaveLength(1);
+    expect(listed()).toEqual([
+      ["A.ttf", null],
+      ["B.ttf", null],
+    ]);
+    expect((await read("C.ttf")).checking).toEqual(["A.ttf"]);
+    expect(started).toHaveLength(2);
+  });
+
+  test("a build waits for the checks", async () => {
+    const worker = await read("A.ttf");
+    void store.actions.startBuild();
+    await Bun.sleep(0);
+    expect(worker.waiting.map(({ call }) => call)).toEqual(["check"]);
+    await worker.answerCheck("A.ttf: not a readable font");
+    expect(store.state.build).toEqual({ status: "failed", error: "A.ttf: not a readable font", user: true });
+  });
 });

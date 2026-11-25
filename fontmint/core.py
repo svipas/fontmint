@@ -225,7 +225,11 @@ class Prepared:
 
 def inspect(font_bytes: bytes) -> FontInfo:
     """Family, axes, named instances and features of a font."""
-    font = load(font_bytes)
+    return font_info(load(font_bytes, lazy=True))
+
+
+def font_info(font: TTFont) -> FontInfo:
+    """inspect() for a loaded font."""
     variable = is_variable(font)
     axes = [(a.axisTag, a.minValue, a.defaultValue, a.maxValue) for a in font["fvar"].axes] if variable else []
     instances = (

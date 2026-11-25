@@ -69,11 +69,11 @@ The rest of this document helps you navigate the codebase and make changes effec
 - `assets/` - the logo.
 - `web/` - the website: a static React page on GitHub Pages that runs the core in Pyodide, in Web Workers.
   - `web/fontmint_web.py` - the glue the page calls: plain dicts in and out, the web's rules (never hinted, no static OTF), progress events. Tested by `tests/test_web.py` on desktop Python.
-  - `web/src/pyodide/fontmint.ts` - starts Pyodide, installs the wheels, wraps the glue in a typed API. Shared by the worker (`src/worker.ts`), the smoke test and `scripts/bench.ts`.
+  - `web/src/pyodide/fontmint.ts` - starts Pyodide with fontmint, wraps the glue in a typed API. Shared by the worker (`src/worker.ts`), the smoke test and `scripts/bench.ts`.
   - `web/src/store.ts` - the page's one store (TanStack Store): fonts, options, and the build across workers. Components read it with `useSelector(store, …)` and change it through `store.actions`.
   - `web/src/lib/options.ts` - the form: its checks as you type, the options sent to the glue, and the matching CLI command.
   - `web/src/components/` - the page; `components/ui/` holds shadcn components (Base UI), copied in and edited.
-  - `web/scripts/assets.ts` - downloads Pyodide and fontTools (checked against pinned hashes), builds the fontmint wheel, writes `public/manifest.json`.
+  - `web/scripts/assets.ts` - downloads Pyodide and fontTools (checked against pinned hashes), builds the fontmint wheel, compiles all Python code into one zip (`bundle.py`, in Pyodide), writes `public/manifest.json`.
 
 Dependency direction: `common` ← `features` / `naming` / `axes` / `metrics` / `subset` / `convert` ← `core` ← `report` ← `cli`. Nothing imports `cli`.
 
@@ -84,7 +84,7 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 - `uv sync` installs fontmint, ruff and ty into `.venv`, at the versions in `uv.lock`.
 - `uv run fontmint FONT --info` shows axes, named instances, features and languages.
 - `uv run fontmint FONT --features ss01 --name "X" --output /tmp/x` runs the tool. Write test output outside the repo; `dist/` is gitignored but easy to forget.
-- The website needs [Bun](https://bun.com) and the development install above. In `web/`: `bun install`, then `bun run assets` (again after changing `fontmint/`, to rebuild the wheel the page loads), then `bun run dev` for a dev server with hot reload. `bun run build` writes `web/dist/`; `bun run serve` serves it under `/fontmint/`, as GitHub Pages does.
+- The website needs [Bun](https://bun.com) and the development install above. In `web/`: `bun install`, then `bun run assets` (again after changing `fontmint/`, to rebuild the zip the page loads), then `bun run dev` for a dev server with hot reload. `bun run build` writes `web/dist/`; `bun run serve` serves it under `/fontmint/`, as GitHub Pages does.
 
 ## Verifying
 

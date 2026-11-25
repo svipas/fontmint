@@ -23,32 +23,42 @@ import zipfile
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, replace
 
-from fontmint import FontmintError, Options, build_job, inspect
+from fontmint import FontmintError, Options, build_job
 from fontmint import prepare as prepare_font
 from fontmint.common import load
-from fontmint.core import Prepared, check_clashes, output_paths
+from fontmint.core import Prepared, check_clashes, font_info, output_paths
 from fontmint.features import changed_characters
 from fontmint.report import Entry, log_lines, make_entry
 from fontmint.report import render as render_report
 
-__all__ = ["check_clashes", "describe", "prepare", "run_job", "zip_files"]
+__all__ = ["check", "check_clashes", "describe", "prepare", "run_job", "zip_files"]
 
 Report = Callable[[dict], None]
 
 
 def describe(name: str, font_bytes: bytes) -> dict:
-    """What the page shows about a dropped font: inspect() as a dict, plus whether it
+    """What the page shows about a dropped font: its FontInfo as a dict, plus whether it
     has CFF2 outlines (its variable font is written as OTF) and, per feature, the
-    characters freezing it swaps (the preview marks them)."""
+    characters freezing it swaps (the preview marks them). check() looks for damage
+    in what this doesn't read."""
     data = bytes(font_bytes)
     try:
-        info = asdict(inspect(data))
-        font = load(data, check=False)
+        font = load(data, check=False, lazy=True)
+        info = asdict(font_info(font))
         info["cff2"] = "CFF2" in font
         info["changes"] = changed_characters(font, info["features"])
+    except Exception:
+        check(name, data)  # raises a clearer error if the font is damaged
+        raise
+    return info
+
+
+def check(name: str, font_bytes: bytes) -> None:
+    """Look for damage in the whole font, once, before prepare()."""
+    try:
+        load(bytes(font_bytes))
     except FontmintError as e:
         raise FontmintError(f"{name}: {e}") from e
-    return info
 
 
 def web_options(options: dict, variable: bool, cff2: bool) -> Options:
@@ -73,7 +83,7 @@ def web_options(options: dict, variable: bool, cff2: bool) -> Options:
 
 
 def prepare(name: str, font_bytes: bytes, options: dict, report: Report) -> dict:
-    """Freeze, rename and plan one font that describe() has read. Returns the paths it will
+    """Freeze, rename and plan one font that passed check(). Returns the paths it will
     produce (for check_clashes() across all inputs before anything is built), the files that
     are ready, the jobs for run_job(), the output folder, and the font's part of the report
     for zip_files().

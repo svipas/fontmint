@@ -4,6 +4,9 @@ import { type Fontmint, loadFontmint } from "./pyodide/fontmint";
 import { type FromWorker, type ToWorker, transferables } from "./lib/protocol";
 import { type BuildEvent, FontmintError, type Manifest } from "./lib/types";
 
+/** public/manifest.json, filled in by build.ts and dev.ts. */
+declare const MANIFEST: Manifest;
+
 const base = new URL("./", self.location.href).href;
 // `self` is typed as Bun's global here; in the browser it's the worker's scope.
 const post = (message: FromWorker, transfer: Transferable[] = []) => self.postMessage(message, transfer as never);
@@ -22,6 +25,7 @@ self.addEventListener("message", async ({ data }: MessageEvent<ToWorker>) => {
     let value: unknown;
     if (data.call === "start") value = fm.manifest;
     else if (data.call === "describe") value = fm.describe(data.name, data.font);
+    else if (data.call === "check") value = fm.check(data.name, data.font) ?? null;
     else if (data.call === "prepare") value = fm.prepare(data.name, data.font, data.options, report);
     else if (data.call === "checkClashes") value = fm.checkClashes(data.outputs) ?? null;
     else if (data.call === "runJob") value = fm.runJob(data.name, data.job, data.source, report);
@@ -32,9 +36,13 @@ self.addEventListener("message", async ({ data }: MessageEvent<ToWorker>) => {
   }
 });
 
-// Pyodide reports some failures (its .wasm file not arriving) outside the promise it
-// returned, which then never settles: without this, the page would wait forever.
+// Pyodide reports some failures outside the promise it returned, or not at all; that promise
+// then never settles, and without this the page would wait forever.
 const crash = (reason: unknown) => post({ type: "crash", message: started ? messageOf(reason) : loadFailure(reason) });
+const failed = (error: unknown): never => {
+  crash(error);
+  throw error;
+};
 self.addEventListener("unhandledrejection", (event) => crash(event.reason));
 self.addEventListener("error", (event) => crash(event.error ?? event.message));
 
@@ -50,19 +58,12 @@ function messageOf(error: unknown): string {
 }
 
 async function start(): Promise<Fontmint> {
-  const response = await fetch(`${base}manifest.json`);
-  if (!response.ok) throw new Error(`manifest.json: HTTP ${response.status}`);
-  const manifest: Manifest = await response.json();
-  trackDownloads(manifest.downloads);
-  return loadFontmint(base, async (path) => {
-    const file = await fetch(base + path);
-    if (!file.ok) throw new Error(`${path}: HTTP ${file.status}`);
-    return new Uint8Array(await file.arrayBuffer());
-  });
+  trackDownloads(MANIFEST.downloads);
+  return loadFontmint(base, MANIFEST);
 }
 
-/** Counts the bytes of the files Pyodide and fontmint download, as they stream in, so the
- * page can show a progress bar. Wrapping fetch() sees Pyodide's own downloads too. */
+/** For the page's progress bar. Also reports a file that doesn't arrive or can't run: without its
+ * .wasm file, Pyodide would wait forever, and without brotli it would start anyway. */
 function trackDownloads(sizes: Record<string, number>): void {
   const total = Object.values(sizes).reduce((sum, size) => sum + size, 0);
   let loaded = 0;
@@ -74,22 +75,24 @@ function trackDownloads(sizes: Record<string, number>): void {
       post({ type: "download", loaded: Math.min(loaded, total), total });
     }
   };
+  const realInstantiate = WebAssembly.instantiateStreaming;
+  WebAssembly.instantiateStreaming = (source, imports) => realInstantiate(source, imports).catch(failed);
   const realFetch = self.fetch.bind(self);
   self.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const response = await realFetch(input, init);
     const url = input instanceof Request ? input.url : String(input);
-    if (!response.body || !url.startsWith(base) || !(url.slice(base.length) in sizes)) return response;
-    const counted = response.body.pipeThrough(
-      new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, controller) {
-          loaded += chunk.byteLength;
-          report(loaded >= total);
-          controller.enqueue(chunk);
-        },
-      }),
-    );
+    if (!url.startsWith(base) || !(url.slice(base.length) in sizes)) return realFetch(input, init);
+    const response = await realFetch(input, init).catch(failed);
+    if (!response.ok || !response.body) return failed(new Error(`${url.split("/").pop()}: HTTP ${response.status}`));
+    const counter = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        loaded += chunk.byteLength;
+        report(loaded >= total);
+        controller.enqueue(chunk);
+      },
+    });
+    response.body.pipeTo(counter.writable).catch(crash);
     // Keeps the headers (WebAssembly needs Content-Type: application/wasm to stream).
-    return new Response(counted, {
+    return new Response(counter.readable, {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,

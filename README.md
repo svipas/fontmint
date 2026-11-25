@@ -417,7 +417,7 @@ The website lives in `web/` and needs [Bun](https://bun.com):
 ```bash
 cd web
 bun install
-bun run assets  # Pyodide, fontTools and a fontmint wheel built from this repo
+bun run assets  # Pyodide, fontTools and fontmint, built from this repo
 bun run dev  # dev server with hot reload
 ```
 
