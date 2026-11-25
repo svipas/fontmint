@@ -320,7 +320,8 @@ dist/InterClear/
 ├── ttf-hinted/      static, hinted
 ├── otf/             static, CFF outlines
 ├── woff2-unhinted/  static, unhinted
-└── woff2-hinted/    static, hinted
+├── woff2-hinted/    static, hinted
+└── fontmint.txt     what was changed
 ```
 
 Custom-range variable fonts (`--weight 300:700`) go to `variable/` too, named after the range: `InterClear-wght300-700[opsz,wght].ttf`.

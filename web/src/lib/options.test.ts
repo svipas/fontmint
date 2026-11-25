@@ -183,11 +183,11 @@ describe("cliCommands", () => {
     const italic = fontInfo({ features: ["ss01"], italic: true });
     const both = form({ freeze: ["ss01", "ss02"] });
     expect(cliCommands(["A.ttf", "A-Italic.ttf"], form({ freeze: ["ss01"] }), [upright, italic])).toEqual([
-      "fontmint A.ttf A-Italic.ttf --features ss01 --name 'Mint Sans'",
+      'fontmint A.ttf A-Italic.ttf --features ss01 --name "Mint Sans"',
     ]);
     expect(cliCommands(["A.ttf", "A-Italic.ttf"], both, [upright, italic])).toEqual([
-      "fontmint A.ttf --features ss01,ss02 --name 'Mint Sans'",
-      "fontmint A-Italic.ttf --features ss01 --name 'Mint Sans'",
+      'fontmint A.ttf --features ss01,ss02 --name "Mint Sans"',
+      'fontmint A-Italic.ttf --features ss01 --name "Mint Sans"',
     ]);
   });
 
@@ -198,17 +198,17 @@ describe("cliCommands", () => {
       { axes: {}, name: " " },
     ];
     expect(cliCommands(["A.ttf", "B.ttf"], form({ styles }), [fontInfo(), fontInfo({ variable: false })])).toEqual([
-      "fontmint A.ttf --name 'Mint Sans' --weight 375 --style-name Regular",
-      "fontmint B.ttf --name 'Mint Sans'",
-      "fontmint A.ttf --name 'Mint Sans' --weight 675 --style-name Bold",
+      'fontmint A.ttf --name "Mint Sans" --weight 375 --style-name Regular',
+      'fontmint B.ttf --name "Mint Sans"',
+      'fontmint A.ttf --name "Mint Sans" --weight 675 --style-name Bold',
     ]);
   });
 
   test("axis values only go to variable fonts", () => {
     const fonts = [fontInfo(), fontInfo({ variable: false, axes: [], instances: [] })];
     expect(cliCommands(["A.ttf", "B.ttf"], form({ axes: { wght: "375" } }), fonts)).toEqual([
-      "fontmint A.ttf --name 'Mint Sans' --weight 375",
-      "fontmint B.ttf --name 'Mint Sans'",
+      'fontmint A.ttf --name "Mint Sans" --weight 375',
+      'fontmint B.ttf --name "Mint Sans"',
     ]);
   });
 
@@ -219,8 +219,18 @@ describe("cliCommands", () => {
       [fontInfo()],
     );
     expect(command).toBe(
-      "fontmint 'Test Sans[wght,wdth].ttf' --features ss01 --disable calt --name 'Mint Sans' --weight 300:700 --axis XHGT=1",
+      'fontmint "Test Sans[wght,wdth].ttf" --features ss01 --disable calt --name "Mint Sans" --weight 300:700 --axis XHGT=1',
     );
+  });
+
+  test("file names that would be options", () => {
+    expect(one(["-A.ttf"], form(), [fontInfo()])).toStartWith("fontmint ./-A.ttf ");
+    expect(one(["=A.ttf"], form(), [fontInfo()])).toStartWith("fontmint ./=A.ttf ");
+  });
+
+  test("names that would be options", () => {
+    expect(one(["A.ttf"], form({ name: "-Foo" }), [fontInfo()])).toBe("fontmint A.ttf --name=-Foo");
+    expect(one(["A.ttf"], form({ name: "=Foo Bar" }), [fontInfo()])).toBe('fontmint A.ttf "--name==Foo Bar"');
   });
 
   test("leaves out --formats when both are chosen, so the CLI builds everything", () => {
@@ -234,14 +244,16 @@ describe("cliCommands", () => {
   test("--no-static, and no output options for static fonts", () => {
     expect(one(["A.ttf"], form({ staticFonts: false }), [fontInfo()])).toContain("--no-static");
     expect(one(["A.ttf"], form({ staticFonts: false }), [fontInfo({ variable: false })])).toBe(
-      "fontmint A.ttf --name 'Mint Sans'",
+      'fontmint A.ttf --name "Mint Sans"',
     );
   });
 });
 
 test("shellQuote", () => {
   expect(shellQuote("Inter.ttf")).toBe("Inter.ttf");
-  expect(shellQuote("it's here")).toBe(`'it'\\''s here'`);
+  expect(shellQuote("it's here")).toBe(`"it's here"`);
+  expect(shellQuote("it's $5")).toBe(`'it'\\''s $5'`);
+  expect(shellQuote("Wow!")).toBe("'Wow!'");
   expect(shellQuote("$(rm -rf ~)")).toBe("'$(rm -rf ~)'");
 });
 

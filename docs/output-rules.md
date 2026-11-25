@@ -6,7 +6,7 @@ Exactly what fontmint builds for a given input and options. Paths are relative t
 
 | Input    | Axis options                           | Output                                                                                                                    |
 | -------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| static   | -                                      | `<F>/<PostScriptName>.<same extension as input>` - nothing else                                                           |
+| static   | -                                      | `<F>/<PostScriptName>.<same extension as input>` - no other fonts                                                         |
 | static   | any                                    | error                                                                                                                     |
 | variable | none                                   | variable font (`<F>/variable/…`) + one static font per **named instance**, in every format                                |
 | variable | single values only                     | static fonts for every combination - no variable font                                                                     |
@@ -14,7 +14,19 @@ Exactly what fontmint builds for a given input and options. Paths are relative t
 
 `--no-static` builds only variable fonts: the default mode drops the named instances, and single axis values (or `--style-name`) are an error. It's ignored with a warning for static input.
 
+Files that aren't fonts (`folder/*` also gives licenses, readmes, folders and our own `fontmint.txt`) are skipped with a message, and it's an error if nothing is left. A file named like a font is never skipped: a damaged one has to fail, or a family would be built without it. Files with other names are fonts if they start like one. The website goes by the file name only.
+
 Two inputs that would write the same path (same font twice, or two families with one `--name`) are an error. An existing family folder in `--output` gives a warning: same-named files are overwritten, others kept.
+
+## Report
+
+Every folder also gets `<F>/fontmint.txt` (`report.py`), the only file that isn't a font: the source fonts and their version, what was changed, the command that builds the same, the warnings, and the files of this run. The website puts it in the zip. `mint()` doesn't return it.
+
+- It describes one run and replaces the one before. Fonts an earlier run left in the folder aren't in its _Files_ list.
+- It holds file names only, never paths, so sharing a build doesn't share the user's folder names. The command leaves out `--output` and `--jobs`, which don't change the fonts.
+- It has no date: the same input and options give the same report.
+- The website's command names the formats and has `--no-hint`, so it builds what is in the zip. The command shown on the page leaves out `--no-hint`, and the formats when both are chosen, so it also builds hinted fonts and OTF.
+- Fonts with the same changes share a section, and fonts with the same arguments share a command. The website's fonts can differ, as each only gets the features it has; several custom styles are one command each.
 
 ## Formats
 
@@ -41,7 +53,7 @@ A variable font with CFF2 outlines is written as `.otf` (format `otf`) and WOFF2
 
 - Static: `<F>-<Style without spaces>` - `InterClear-BoldItalic.ttf`, `OpenSansCustom-CondensedBold.otf`.
 - Variable, default mode: `<F>[-Italic][<axis tags in fvar order>]` - `InterClear[opsz,wght].ttf`.
-- Variable, custom range: `<F>[-Italic]-<limits>[<remaining axes>]` - `InterClear-wght300-700[opsz,wght].ttf`, `OpenSansCustom-wght300-600-Condensed[wght].ttf`.
+- Variable, custom range: `<F>[-Italic]-<limits>[<remaining axes>]` - `InterClear-wght300-700[opsz,wght].ttf`, `OpenSansCustom-wght300-600-Condensed[wght].ttf`. The limits are in the order of the command line's axis options (`axes.FLAGS`), then the font's other axes in its own order, however they were given.
 - Static input: the font's (renamed) PostScript name, original extension.
 
 `--name` and `--style-name` may only use ASCII letters, digits, spaces and punctuation other than `[](){}<>/%\:*?"|`, so names are valid in PostScript and as file names on every OS. Repeated spaces become one. Without `--name`, folder and file names come from names inside the font, which can't be trusted: unsafe characters become `_`, so output never leaves `--output`. Axis tags in file names are cleaned the same way. A resulting PostScript name (ID 6, or a static file stem) longer than 63 characters is an error.

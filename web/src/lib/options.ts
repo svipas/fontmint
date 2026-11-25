@@ -251,9 +251,14 @@ const AXIS_FLAGS: Record<string, string> = {
   opsz: "--optical-size",
 };
 
-/** A word for a POSIX shell: as it is when that's safe, otherwise in single quotes. */
+/** argparse takes "-…" for an option, zsh expands "=…". */
+const MISREAD_START = /^[-=]/;
+
+/** Quotes a word for a shell, as report.py does: in double quotes where those are safe, as
+ * cmd.exe knows no others. */
 export function shellQuote(word: string): string {
-  return /^[\w.,:=+@%/-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`;
+  if (/^[\w.,:=+@%/-]+$/.test(word)) return word;
+  return /["$`\\!]/.test(word) ? `'${word.replaceAll("'", `'\\''`)}'` : `"${word}"`;
 }
 
 /** The same build as fontmint commands: one for all fonts when they take the same options,
@@ -272,7 +277,7 @@ export function cliCommands(files: string[], form: Form, fonts: FontInfo[]): str
       const key = args.join(" ");
       const group = groups.get(key) ?? { files: [], args };
       groups.set(key, group);
-      group.files.push(shellQuote(files[i]!));
+      group.files.push(shellQuote(files[i]!.replace(MISREAD_START, "./$&")));
     });
   }
   return [...groups.values()].map((group) => ["fontmint", ...group.files, ...group.args].join(" "));
@@ -280,7 +285,8 @@ export function cliCommands(files: string[], form: Form, fonts: FontInfo[]): str
 
 function cliArgs(form: Form, info: FontInfo, style?: { axes: Record<string, string>; style_name: string }): string[] {
   const args: string[] = [];
-  const add = (flag: string, value: string) => value && args.push(flag, shellQuote(value));
+  const add = (flag: string, value: string) =>
+    value && args.push(...(MISREAD_START.test(value) ? [shellQuote(`${flag}=${value}`)] : [flag, shellQuote(value)]));
   const { features = "", language = "", disable = "" } = webOptions(form, info);
   add("--features", features);
   add("--language", language);

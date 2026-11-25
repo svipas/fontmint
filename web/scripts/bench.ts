@@ -2,7 +2,7 @@
 // and reports the time each step takes. Writes the zip next to the first font.
 // bun scripts/bench.ts '{"features": "ss02", "name": "Inter Clear"}' InterVariable.ttf …
 import { basename, dirname, join } from "node:path";
-import { type BuildEvent, loadFontmint } from "../src/pyodide/fontmint";
+import { type BuildEvent, loadFontmint, type ReportEntry } from "../src/pyodide/fontmint";
 
 const pub = join(import.meta.dir, "..", "public") + "/";
 const [optionsJson = "{}", ...paths] = Bun.argv.slice(2);
@@ -24,16 +24,17 @@ console.log(
 
 started = performance.now();
 const files: Record<string, Uint8Array> = {};
+const entries: ReportEntry[] = [];
 for (const path of paths) {
   const font = await Bun.file(path).bytes();
   const info = fontmint.describe(basename(path), font);
   console.log(
     `${basename(path)}: ${info.family}, ${info.variable ? "variable" : "static"}, ${info.features.length} features`,
   );
-  fontmint.prepare(basename(path), font, JSON.parse(optionsJson), print);
+  entries.push(fontmint.prepare(basename(path), font, JSON.parse(optionsJson), print).entry);
   Object.assign(files, fontmint.build(basename(path), print));
 }
-const zip = fontmint.zipFiles(files, print);
+const zip = fontmint.zipFiles(files, entries, print);
 const out = join(dirname(paths[0] ?? "."), "fontmint-bench.zip");
 await Bun.write(out, zip);
 console.log(

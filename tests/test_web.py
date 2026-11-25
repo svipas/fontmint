@@ -168,10 +168,24 @@ class ClashAndZipTest(unittest.TestCase):
     def test_zip_has_the_cli_layout(self):
         files = {"MintSans/woff2-unhinted/MintSans-Bold.woff2": b"b", "MintSans/variable/MintSans[wght].ttf": b"v"}
         events: list[dict] = []
-        archive = zipfile.ZipFile(io.BytesIO(web.zip_files(files, events.append)))
+        archive = zipfile.ZipFile(io.BytesIO(web.zip_files(files, [], "1.2.3", events.append)))
         self.assertEqual(archive.namelist(), sorted(files))
         self.assertEqual(archive.read("MintSans/variable/MintSans[wght].ttf"), b"v")
         self.assertEqual([e["path"] for e in events], sorted(files))
+
+    def test_zip_has_a_report(self):
+        styles = [{"axes": {"wght": "375"}, "style_name": "Regular"}, {"axes": {"wght": "675"}, "style_name": "Bold"}]
+        options = {"name": "Mint Sans", "formats": ["ttf", "woff2"], "styles": styles}
+        entry = web.prepare("TestSans.ttf", fx.variable_ttf(), options, lambda event: None)["entry"]
+        entry = json.loads(json.dumps(entry))  # plain values only: it goes through JavaScript
+        files = web.build("TestSans.ttf", lambda event: None)
+        archive = zipfile.ZipFile(io.BytesIO(web.zip_files(files, [entry], "1.2.3", lambda event: None)))
+        self.assertEqual(archive.namelist(), sorted([*files, "MintSans/fontmint.txt"]))
+        report = archive.read("MintSans/fontmint.txt").decode()
+        self.assertIn("Made with       the fontmint website 1.2.3 (https://svipas.github.io/fontmint)\n", report)
+        self.assertIn('    Styles          weight 375 as "Regular"\n                    weight 675 as "Bold"\n', report)
+        self.assertIn("--weight 375 --style-name Regular --formats ttf,woff2 --no-hint\n", report)
+        self.assertIn("\n  ttf-unhinted/MintSans-Bold.ttf\n", report)
 
 
 class NativeHelpersTest(unittest.TestCase):

@@ -12,6 +12,7 @@ import {
   FontmintError,
   type Manifest,
   type Plan,
+  type ReportEntry,
   type WebOptions,
 } from "../lib/types";
 
@@ -28,7 +29,7 @@ export type Fontmint = {
   /** Throws if two inputs (each one's prepare() paths) would write the same file. */
   checkClashes(outputs: string[][]): void;
   build(name: string, report: (event: BuildEvent) => void): Files;
-  zipFiles(files: Files, report: (event: BuildEvent) => void): Uint8Array;
+  zipFiles(files: Files, entries: ReportEntry[], report: (event: BuildEvent) => void): Uint8Array;
 };
 
 /** `base` is the URL (browser) or folder (tests) holding pyodide/, wheels/ and manifest.json. */
@@ -88,9 +89,10 @@ function wrap(pyodide: PyodideAPI, web: PyProxy & Record<string, Function>, mani
       call(() => web.check_clashes!(pyOutputs), pyOutputs);
     },
     build: (name, report) => call(() => web.build!(name, reporter(report))),
-    zipFiles: (files, report) => {
+    zipFiles: (files, entries, report) => {
       const pyFiles = pyodide.toPy(files);
-      return call(() => web.zip_files!(pyFiles, reporter(report)), pyFiles);
+      const pyEntries = pyodide.toPy(entries);
+      return call(() => web.zip_files!(pyFiles, pyEntries, manifest.site, reporter(report)), pyFiles, pyEntries);
     },
   };
 }

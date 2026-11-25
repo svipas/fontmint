@@ -21,6 +21,9 @@ from .common import FontmintError
 
 Value = float | tuple[float, float]  # pinned value or (min, max) range
 
+# Axes with a command line option of their own. File names list them in this order.
+FLAGS = {"wght": "--weight", "wdth": "--width", "slnt": "--slant", "ital": "--italic", "opsz": "--optical-size"}
+
 
 def parse_spec(spec) -> list:
     """'400,700' / '300:700' / 'all' / 400 / [400, (300, 700), 'all'] → list of items."""
@@ -93,7 +96,8 @@ def plan(font: TTFont, specs: Mapping[str, object]) -> Plan:
             values.append(item)
         expanded[tag] = list(dict.fromkeys(values))
 
-    tags = list(expanded)
+    # The same order however the axes were given, as file names follow it.
+    tags = [t for t in (*FLAGS, *(a for a in axes if a not in FLAGS)) if t in expanded]
     combos = [dict(zip(tags, vals, strict=True)) for vals in itertools.product(*(expanded[t] for t in tags))]
     labeled = {t for t, vals in expanded.items() if sum(not isinstance(v, tuple) for v in vals) > 1}
     return Plan(combos, labeled)

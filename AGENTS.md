@@ -12,7 +12,7 @@ People use fontmint on fonts they rely on every day, for their editor, their ter
 
 ### 1. We don't break fonts
 
-Whatever fontmint writes must install and render correctly. Static input passes through untouched apart from what you ask for (frozen or disabled features, the new name, line height, letter spacing and a subset): same format, original hinting kept, no extra files. Variable output only gets the same edits - never hinted, never outline-converted. When in doubt, change less.
+Whatever fontmint writes must install and render correctly. Static input passes through untouched apart from what you ask for (frozen or disabled features, the new name, line height, letter spacing and a subset): same format, original hinting kept, no extra fonts. Variable output only gets the same edits - never hinted, never outline-converted. When in doubt, change less.
 
 ### 2. We respect licenses
 
@@ -50,7 +50,7 @@ The rest of this document helps you navigate the codebase and make changes effec
 
 1. **Renaming notices.** Replacing the family name everywhere also rewrites the copyright and trademark ("The Inter **Clear** Project Authors"). Rename only the name IDs in `naming.FAMILY_NAME_IDS` and ≥ 256.
 2. **Native imports at module level.** `ttfautohint`, `skia-pathops` (`removeOverlaps`) and `cffsubr` are imported inside functions in `convert.py` only. A top-level import makes the whole core unusable where they don't exist - including the website, which never installs them.
-3. **Side effects in the core.** `core.py` and everything below it never print, exit, read or write files. Raise `FontmintError`; `cli.py` turns it into a message.
+3. **Side effects in the core.** `core.py`, `report.py` and everything below them never print, exit, read or write files. Raise `FontmintError`; `cli.py` turns it into a message.
 4. **Writing as you go.** The CLI prepares every input, checks that no two inputs write the same file, builds every job, and only then writes. Keep it that way, or one bad font or failing job leaves a half-finished build behind.
 
 ## Where code lives
@@ -61,6 +61,7 @@ The rest of this document helps you navigate the codebase and make changes effec
 - `fontmint/metrics.py` - line height and letter spacing.
 - `fontmint/subset.py` - keeping only some characters (`--subset`).
 - `fontmint/naming.py` - family renaming, style names, name records, weight/width classes.
+- `fontmint/report.py` - what a build changed, as text: the log lines and `fontmint.txt`.
 - `fontmint/convert.py` - TrueType → OTF and autohinting. The only module that uses native helpers.
 - `fontmint/common.py` - `FontmintError`, `FORMATS`, loading/saving fonts.
 - `fontmint/cli.py` - argparse, file I/O, parallel builds. Its module docstring is the `--help` epilog.
@@ -74,7 +75,7 @@ The rest of this document helps you navigate the codebase and make changes effec
   - `web/src/components/` - the page; `components/ui/` holds shadcn components (Base UI), copied in and edited.
   - `web/scripts/assets.ts` - downloads Pyodide and fontTools (checked against pinned hashes), builds the fontmint wheel, writes `public/manifest.json`.
 
-Dependency direction: `common` ← `features` / `naming` / `axes` / `metrics` / `subset` / `convert` ← `core` ← `cli`. Nothing imports `cli`.
+Dependency direction: `common` ← `features` / `naming` / `axes` / `metrics` / `subset` / `convert` ← `core` ← `report` ← `cli`. Nothing imports `cli`.
 
 How a font flows through these modules: [docs/architecture.md](docs/architecture.md). Exactly what gets built, and how files and styles are named: [docs/output-rules.md](docs/output-rules.md).
 
@@ -98,7 +99,7 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 
 ## Changing behavior
 
-- **New option:** add it to `Options` in `core.py`, map it in `cli.py`, and document it in the README (_Options_ table and an example) and in the `cli.py` module docstring. If the page should offer it: `web_options()` in `web/fontmint_web.py`, then `webOptions()` and `cliCommands()` in `web/src/lib/options.ts` and a field in `Options.tsx`.
+- **New option:** add it to `Options` in `core.py`, map it in `cli.py`, add it to the report (`make_entry()` and `_arguments()` in `report.py`), and document it in the README (_Options_ table and an example) and in the `cli.py` module docstring. If the page should offer it: `web_options()` in `web/fontmint_web.py`, then `webOptions()` and `cliCommands()` in `web/src/lib/options.ts` and a field in `Options.tsx`.
 - **Changed checks:** the page checks fields as the user types, with fontmint's rules repeated in `formErrors()` (`web/src/lib/options.ts`): `naming.check_name`'s characters, `LINE_HEIGHT_RANGE`, `LETTER_SPACING_RANGE`, character ranges, axis values and style names. Change both together; the core still checks everything when building.
 - **Different outputs:** update [docs/output-rules.md](docs/output-rules.md) and the README in the same change.
 - **CLI:** long options only, `allow_abbrev=False`. Axis flags require a value (`--weight all`); an optional value would swallow a following font filename.

@@ -54,6 +54,17 @@ class PlanTest(unittest.TestCase):
         )
         self.assertEqual(p.labeled, {"wght", "wdth"})
 
+    def test_order_does_not_depend_on_how_axes_were_given(self):
+        for specs in ({"wght": "300:700", "wdth": "75"}, {"wdth": "75", "wght": "300:700"}):
+            (combo,) = plan(self.font, specs).combos
+            self.assertEqual(list(combo), ["wght", "wdth"])
+
+        for axis, tag in zip(self.font["fvar"].axes, ("MONO", "CASL"), strict=True):
+            axis.axisTag = tag
+        for specs in ({"MONO": "400", "CASL": "75"}, {"CASL": "75", "MONO": "400"}):
+            (combo,) = plan(self.font, specs).combos
+            self.assertEqual(list(combo), ["MONO", "CASL"])
+
     def test_all_uses_named_instance_values(self):
         self.assertEqual(plan(self.font, {"wght": "all"}).combos, [{"wght": 400}, {"wght": 700}])
         self.assertEqual(plan(self.font, {"wdth": "all"}).combos, [{"wdth": 75}, {"wdth": 100}])

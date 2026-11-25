@@ -1,5 +1,5 @@
 // Messages between the page (lib/client.ts) and a worker (worker.ts).
-import type { BuildEvent, Files, FontInfo, Manifest, Plan, WebOptions } from "./types";
+import type { BuildEvent, Files, FontInfo, Manifest, Plan, ReportEntry, WebOptions } from "./types";
 
 /** Each call the page can make, with what it sends and what comes back. */
 export type Calls = {
@@ -8,7 +8,7 @@ export type Calls = {
   prepare: { args: { name: string; font: Uint8Array; options: WebOptions }; result: Plan };
   checkClashes: { args: { outputs: string[][] }; result: null };
   build: { args: { name: string }; result: Files };
-  zip: { args: { files: Files }; result: Uint8Array };
+  zip: { args: { files: Files; entries: ReportEntry[] }; result: Uint8Array };
 };
 
 export type Call = keyof Calls;

@@ -26,6 +26,7 @@ function FileInput({ onFiles }: { onFiles: (files: File[]) => void }) {
 /** The big drop area shown before any font is added. */
 export function DropZone() {
   const addFiles = useStore((s) => s.addFiles);
+  const notice = useStore((s) => s.notice);
   const input = useRef<HTMLDivElement>(null);
   const [over, setOver] = useState(false);
 
@@ -69,6 +70,8 @@ export function DropZone() {
           TTF, OTF or WOFF2, variable or static. Add an upright and its italic together to build the whole family.
         </p>
       </section>
+      {/* Always rendered: screen readers only announce changes inside an element that was already there. */}
+      <div aria-live="polite">{notice && <p className="mt-4 text-center text-sm wrap-anywhere">{notice}</p>}</div>
       <div className="mt-5 flex flex-col items-center gap-2 text-center text-sm text-muted-foreground">
         <p className="flex items-center gap-1.5 font-medium text-foreground">
           <LockIcon className="size-3.5 text-primary" aria-hidden="true" />

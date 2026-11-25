@@ -27,6 +27,8 @@ from fontmint import prepare as prepare_font
 from fontmint.common import load
 from fontmint.core import Prepared, check_clashes, output_paths
 from fontmint.features import changed_characters
+from fontmint.report import Entry, log_lines, make_entry
+from fontmint.report import render as render_report
 
 __all__ = ["build", "check_clashes", "describe", "prepare", "zip_files"]
 
@@ -67,14 +69,14 @@ def web_options(options: dict, variable: bool, cff2: bool) -> Options:
                 "and compacts them; here, choose ttf or woff2"
             )
         options["formats"] = formats
-    options["hint"] = False
+        options["hint"] = False
     return Options(**options)
 
 
 def prepare(name: str, font_bytes: bytes, options: dict, report: Report) -> dict:
     """Freeze, rename and plan one font. Returns the paths it will produce (for
     check_clashes() across all inputs before anything is built), the number of jobs
-    build() will run, and the output folder.
+    build() will run, the output folder, and the font's part of the report for zip_files().
 
     `options["styles"]`, a list of {"axes": …, "style_name": …}, plans several builds of
     the font as one - the way to name more than one static font (375 as Regular and 675
@@ -89,26 +91,20 @@ def prepare(name: str, font_bytes: bytes, options: dict, report: Report) -> dict
     except FontmintError as e:
         raise FontmintError(f"{name}: {e}") from e
     _prepared[name] = prepared
-    opts = all_opts[0]  # the styles only differ in axes and style name, which aren't logged
 
     def log(text: str, warning: bool = False) -> None:
         report({"type": "log", "font": name, "text": text, "warning": warning})
 
-    # The same lines as the CLI prints
-    if opts.features:
-        language = f" ({opts.language})" if opts.language else ""
-        log(f"froze {opts.features}{language}: {prepared.frozen} characters remapped")
-    if opts.disable:
-        log(f"disabled {opts.disable}")
-    if opts.line_height is not None:
-        log(f"line height {opts.line_height:g}")
-    if opts.letter_spacing:
-        log(f"letter spacing {opts.letter_spacing:+g} em")
-    if prepared.subset:
-        log(f"subset {opts.subset}: kept {prepared.subset[0]} of {prepared.subset[1]} characters")
+    for line in log_lines(all_opts[0], prepared):
+        log(line)
     for warning in prepared.warnings:
         log(f"warning: {warning}", warning=True)
-    return {"paths": output_paths(prepared), "jobs": len(prepared.jobs), "folder": prepared.folder}
+    return {
+        "paths": output_paths(prepared),
+        "jobs": len(prepared.jobs),
+        "folder": prepared.folder,
+        "entry": asdict(make_entry(name, data, all_opts, prepared)),
+    }
 
 
 def _merge(plans: list[Prepared]) -> Prepared:
@@ -161,8 +157,11 @@ def _where(location: Mapping) -> str:
     )
 
 
-def zip_files(files: dict[str, bytes], report: Report) -> bytes:
-    """All files in one zip, in the CLI's folder layout."""
+def zip_files(files: dict[str, bytes], entries: list[dict], site: str, report: Report) -> bytes:
+    """All files in one zip, in the CLI's folder layout, with the report (fontmint.txt).
+    `entries` holds each font's "entry" from prepare(), `site` is the website's version."""
+    made_with = f"the fontmint website {site} (https://svipas.github.io/fontmint)"
+    files = {**files, **render_report([Entry(**entry) for entry in entries], files, made_with)}
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(files):

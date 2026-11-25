@@ -1,5 +1,6 @@
 import contextlib
 import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -33,7 +34,11 @@ class CliTest(unittest.TestCase):
         return code, stdout.getvalue(), stderr.getvalue()
 
     def written(self) -> list[str]:
-        return sorted(str(p.relative_to(self.out)) for p in self.out.rglob("*") if p.is_file())
+        """The fonts written, next to exactly one report."""
+        files = sorted(str(p.relative_to(self.out)) for p in self.out.rglob("*") if p.is_file())
+        fonts = [f for f in files if not f.endswith("/fontmint.txt")]
+        self.assertEqual(len(files) - len(fonts), 1)
+        return fonts
 
     def test_variable_with_axis_values(self):
         code, _, err = self.run_cli(
@@ -70,6 +75,95 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertEqual(self.written(), ["MintSans/MintSans-Regular.otf"])
 
+    def test_files_that_are_not_fonts_are_skipped(self):
+        (self.tmp / "OFL.txt").write_text("license")
+        (self.tmp / "empty").touch()
+        (self.tmp / "static").mkdir()
+        (self.tmp / "no extension").write_bytes(fx.static_otf())
+        (self.tmp / "TestSans-Regular.otf").unlink()
+        (self.tmp / "TestSans[wght,wdth].ttf").rename(self.tmp / "TestSans.TTF")
+        args = (*sorted(self.tmp.iterdir()), "--name", "Mint Sans", "--no-static")
+        code, _, err = self.run_cli(*args, "--formats", "ttf", "--output", self.out)
+        self.assertEqual(code, 0, err)
+        for name, what in [("OFL.txt", "not a font"), ("empty", "not a font"), ("static", "a folder")]:
+            self.assertIn(f"skipped {name}: {what}\n", err)
+        self.assertEqual(self.written(), ["MintSans/MintSans-Regular.otf", "MintSans/variable/MintSans[wght,wdth].ttf"])
+        self.assertNotIn("OFL", (self.out / "MintSans/fontmint.txt").read_text(encoding="utf-8"))
+
+        code, out, _ = self.run_cli(*sorted(self.tmp.glob("*s*")), "--info")
+        self.assertEqual((code, out.count("family:")), (0, 2))
+
+    def test_no_fonts_at_all(self):
+        (self.tmp / "OFL.txt").write_text("license")
+        for paths in ([self.tmp / "OFL.txt"], [self.tmp], [self.tmp / "OFL.txt", "--info"]):
+            with self.subTest(paths=paths):
+                code, _, err = self.run_cli(*paths, "--output", self.out)
+                self.assertEqual(code, 1)
+                self.assertIn("no fonts to read", err)
+        self.assertFalse(self.out.exists())
+
+    def test_damaged_fonts_are_never_skipped(self):
+        damaged = [f"Damaged{suffix}" for suffix in (".TTF", ".otf", ".woff", ".woff2", ".ttc", ".otc")]
+        signed = [b"\0\1\0\0", b"OTTO", b"true", b"wOFF", b"wOF2", b"ttcf"]
+        for name, data in [*((n, b"text") for n in damaged), *(("no extension", s + b"text") for s in signed)]:
+            with self.subTest(name=name, data=data):
+                (self.tmp / name).write_bytes(data)
+                code, _, err = self.run_cli(
+                    self.tmp / "TestSans-Regular.otf", self.tmp / name, "--name", "Mint Sans", "--output", self.out
+                )
+                self.assertEqual(code, 1)
+                self.assertIn(f"error: {name}: ", err)
+        self.assertFalse(self.out.exists())
+
+    def test_unreadable_file(self):
+        locked = self.tmp / "locked"
+        locked.mkdir()
+        (locked / "font.otf").write_bytes(fx.static_otf())
+        locked.chmod(0)
+        try:
+            for name in ("font.otf", "no extension", "x" * 300):
+                code, _, err = self.run_cli(locked / name, "--output", self.out)
+                self.assertEqual(code, 1)
+                self.assertIn(f"error: {name}: ", err)
+        finally:
+            locked.chmod(0o700)
+
+    @unittest.skipUnless(os.path.exists("/dev/stdin"), "no /dev/stdin")
+    def test_each_input_is_read_once(self):
+        """A pipe can't be read twice, and on macOS neither can a redirected file."""
+        font = self.tmp / "TestSans-Regular.otf"
+        command = [sys.executable, "-m", "fontmint", "/dev/stdin", "--info"]
+        piped = subprocess.run(command, input=font.read_bytes(), capture_output=True, timeout=60)
+        self.assertEqual(piped.returncode, 0, piped.stderr)
+        with font.open("rb") as file:
+            redirected = subprocess.run(command, stdin=file, capture_output=True, timeout=60)
+        self.assertEqual(redirected.returncode, 0, redirected.stderr)
+
+    def test_report(self):
+        args = (self.tmp / "TestSans-Regular.otf", "--name", "Mint Sans", "--output", self.out)
+        code, _, err = self.run_cli(*args, "--features", "ss01")
+        self.assertEqual(code, 0, err)
+        self.assertTrue(err.endswith("  MintSans/fontmint.txt\ndone: 2 file(s)\n"), err)
+        report = (self.out / "MintSans/fontmint.txt").read_text(encoding="utf-8")
+        self.assertRegex(report, r"\nMade with       fontmint \d+\.\d+\.\d+ ")
+        self.assertIn("\n    Made default    ss01  Slashed zero\n", report)
+        self.assertIn('\n  fontmint TestSans-Regular.otf --features ss01 --name "Mint Sans"\n', report)
+        self.assertTrue(report.endswith("\nFiles\n\n  MintSans-Regular.otf\n"), report)
+        self.assertNotIn(str(self.tmp), report)  # a path can hold the user's name
+
+        self.assertEqual(self.run_cli(*args)[0], 0)
+        report = (self.out / "MintSans/fontmint.txt").read_text(encoding="utf-8")
+        self.assertNotIn("ss01", report)
+
+    def test_no_report_about_fonts_that_were_not_written(self):
+        (self.out / "MintSans/variable/MintSans[wght,wdth].ttf").mkdir(parents=True)
+        code, _, err = self.run_cli(
+            self.tmp / "TestSans[wght,wdth].ttf", "--name", "Mint Sans", "--no-static", "--output", self.out
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("can't write", err)
+        self.assertFalse((self.out / "MintSans/fontmint.txt").exists())
+
     def test_custom_axis_flag(self):
         code, _, err = self.run_cli(
             self.tmp / "TestSans[wght,wdth].ttf",
@@ -98,6 +192,14 @@ class CliTest(unittest.TestCase):
         )
         self.assertEqual(code, 0, err)
         self.assertEqual(self.written(), ["MintSans/variable/MintSans[wght,wdth].woff2"])
+
+    def test_files_are_written_in_order_with_the_report_last(self):
+        code, _, err = self.run_cli(
+            self.tmp / "TestSans[wght,wdth].ttf", "--name", "Mint Sans", "--formats", "ttf", "--output", self.out
+        )
+        self.assertEqual(code, 0, err)
+        written = [line.strip() for line in err.splitlines() if line.startswith("  MintSans/")]
+        self.assertEqual(written, [*self.written(), "MintSans/fontmint.txt"])
 
     def test_bad_second_font_writes_nothing(self):
         """All inputs are checked before anything is written."""

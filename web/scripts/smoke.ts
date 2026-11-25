@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Files, FontmintError, loadFontmint, type WebOptions } from "../src/pyodide/fontmint";
+import { type Files, FontmintError, loadFontmint, type Plan, type WebOptions } from "../src/pyodide/fontmint";
 import { writeFixtureFonts } from "../test/fixture-fonts";
 
 const pub = join(import.meta.dir, "..", "public") + "/";
@@ -18,9 +18,10 @@ const folder = await mkdtemp(join(tmpdir(), "fontmint-smoke-"));
 try {
   const fonts = writeFixtureFonts(folder);
   const fontmint = await loadFontmint(pub, (path) => Bun.file(pub + path).bytes());
+  let plan: Plan;
   const build = async (path: string, options: WebOptions): Promise<Files> => {
     const name = path.split("/").pop()!;
-    fontmint.prepare(name, await Bun.file(path).bytes(), options, ignore);
+    plan = fontmint.prepare(name, await Bun.file(path).bytes(), options, ignore);
     return fontmint.build(name, ignore);
   };
 
@@ -52,8 +53,10 @@ try {
   files = await build(fonts.static, { features: "ss01", name: "Mint Sans", formats: ["ttf", "woff2"] });
   assert.equal(Object.keys(files).length, 1);
 
-  const zip = fontmint.zipFiles(files, ignore);
+  const zipped: string[] = [];
+  const zip = fontmint.zipFiles(files, [structuredClone(plan!.entry)], (e) => e.type === "file" && zipped.push(e.path));
   assert.deepEqual(Array.from(zip.subarray(0, 4)), [0x50, 0x4b, 0x03, 0x04], "a zip file");
+  assert.ok(zipped.includes("MintSans/fontmint.txt"), zipped.join(", "));
 
   // A user error comes back as its message alone, without the traceback.
   assert.throws(

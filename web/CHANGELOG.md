@@ -2,6 +2,13 @@
 
 What changed on [svipas.github.io/fontmint](https://svipas.github.io/fontmint), per website version (`web/package.json`). The website has its own versions and `web-v*` tags; fontmint's command line and library are in the [main changelog](../CHANGELOG.md).
 
+## 0.3.0
+
+- The zip comes with a `fontmint.txt`: what the build was made from, what was changed, and the command that makes it again.
+- Dropped files that aren't fonts (a license, a readme) are skipped instead of blocking the build.
+- The command for the command line works in the Windows Command Prompt too: names are in double quotes.
+- Custom-range variable fonts get the same file names as from the command line when several axes are set.
+
 ## 0.2.0
 
 - Reset buttons put the preview's size and axes, and each group of options (features, spacing, characters, output), back to their defaults in one click.

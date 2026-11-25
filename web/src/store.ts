@@ -96,6 +96,14 @@ function stopWorkers(): void {
   workers = [];
 }
 
+/** Leaves out what's dropped along with the fonts: a license, fontmint.txt, a folder. */
+const FONT_FILE = /\.(ttf|otf|woff2?|ttc|otc)$/i;
+
+function listed(names: string[]): string {
+  const more = names.length - 5;
+  return more > 1 ? `${names.slice(0, 5).join(", ")} and ${more} more` : names.join(", ");
+}
+
 const warnBeforeLeaving = (event: BeforeUnloadEvent) => event.preventDefault();
 
 export const useStore = create<State>()((set, get) => ({
@@ -113,15 +121,17 @@ export const useStore = create<State>()((set, get) => ({
   previewMode: "live",
   notice: null,
 
-  async addFiles(files) {
+  async addFiles(dropped) {
     // The build's workers end with it, and would take a font still being read with them.
     if (get().build.status === "running") return;
+    const files = dropped.filter((file) => FONT_FILE.test(file.name));
+    const others = dropped.filter((file) => !FONT_FILE.test(file.name)).map((file) => file.name);
     const read = await Promise.all(
       files.map(async (file) => {
         try {
           return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
         } catch {
-          return { name: file.name, bytes: null }; // a folder, or a file that was moved away
+          return { name: file.name, bytes: null }; // e.g. it was moved away
         }
       }),
     );
@@ -139,8 +149,9 @@ export const useStore = create<State>()((set, get) => ({
       }
     }
     const notices = [
-      skipped.length ? `Already added: ${skipped.join(", ")}` : "",
-      unreadable.length ? `Couldn't read: ${unreadable.join(", ")}` : "",
+      others.length ? `Skipped, not font files: ${listed(others)}` : "",
+      skipped.length ? `Already added: ${listed(skipped)}` : "",
+      unreadable.length ? `Couldn't read: ${listed(unreadable)}` : "",
     ];
     // Listed, and read, in the order the file names suggest, so the upright shows first right
     // away instead of the italic a file picker hands over first; orderFonts() settles it below.
@@ -311,7 +322,11 @@ export const useStore = create<State>()((set, get) => ({
 
       running({ stage: "zipping" });
       const count = Object.keys(files).length;
-      const zip = await first.zip(files, onEvent);
+      const zip = await first.zip(
+        files,
+        fonts.map((f) => plans.get(f.name)!.entry),
+        onEvent,
+      );
       const folder = plans.get(fonts[0]!.name)!.folder;
       set({
         built,

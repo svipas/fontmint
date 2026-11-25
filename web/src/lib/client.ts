@@ -1,7 +1,7 @@
 // The page's side of a fontmint worker: each call is a promise; events and download
 // progress arrive through callbacks.
 import { type Call, type Calls, type FromWorker, type ToWorker, transferables } from "./protocol";
-import { type BuildEvent, type Files, FontmintError, type WebOptions } from "./types";
+import { type BuildEvent, type Files, FontmintError, type ReportEntry, type WebOptions } from "./types";
 
 type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => void; onEvent?: (e: BuildEvent) => void };
 
@@ -53,9 +53,9 @@ export class FontmintWorker {
     return this.call("build", { name }, onEvent);
   }
 
-  /** Zips `files`, which are moved into the worker (they're unusable here afterwards). */
-  zip(files: Files, onEvent: (e: BuildEvent) => void) {
-    return this.call("zip", { files }, onEvent);
+  /** Zips `files`, which are moved into the worker (they're unusable here afterwards), with the report. */
+  zip(files: Files, entries: ReportEntry[], onEvent: (e: BuildEvent) => void) {
+    return this.call("zip", { files, entries }, onEvent);
   }
 
   terminate(): void {

@@ -76,7 +76,7 @@ test("the finished build offers its zip", () => {
   render(<BuildPanel />);
   const link = screen.getByRole("link", { name: /Download MintSans.zip · 3.0 MB/ });
   expect(link.getAttribute("download")).toBe("MintSans.zip");
-  expect(screen.getByText(/Built 20 files in 44 s\./)).toBeTruthy();
+  expect(screen.getByText(/Built 20 font files in 44 s\./)).toBeTruthy();
 });
 
 test("names from a font are shown as text, never as HTML", () => {

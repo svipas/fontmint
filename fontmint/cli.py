@@ -49,27 +49,46 @@ import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
-from . import __version__, core
+from . import __version__, core, report
+from .axes import FLAGS
 from .common import FORMATS, FontmintError
 
-AXIS_FLAGS = {  # flag → (axis tag, help)
-    "--weight": ("wght", "weight, e.g. 400,700 or 375 or 300:700"),
-    "--width": ("wdth", "width in %%, e.g. 75,100 (75 = Condensed)"),
-    "--slant": ("slnt", "slant angle in degrees, e.g. -10"),
-    "--italic": ("ital", "italic axis, 0 or 1"),
-    "--optical-size": ("opsz", "optical size, e.g. 32"),
+AXIS_HELP = {
+    "wght": "weight, e.g. 400,700 or 375 or 300:700",
+    "wdth": "width in %%, e.g. 75,100 (75 = Condensed)",
+    "slnt": "slant angle in degrees, e.g. -10",
+    "ital": "italic axis, 0 or 1",
+    "opsz": "optical size, e.g. 32",
 }
+AXIS_FLAGS = {flag: (tag, AXIS_HELP[tag]) for tag, flag in FLAGS.items()}
+FONT_SUFFIXES = {".ttf", ".otf", ".woff", ".woff2", ".ttc", ".otc"}
+FONT_SIGNATURES = {b"\0\1\0\0", b"OTTO", b"true", b"wOFF", b"wOF2", b"ttcf"}
 
 
 def log(msg: str) -> None:
     print(msg, file=sys.stderr, flush=True)
 
 
-def read_font(path: Path) -> bytes:
-    try:
-        return path.read_bytes()
-    except OSError as e:
-        raise FontmintError(e.strerror or str(e)) from e
+def read_fonts(paths: list[Path]) -> list[tuple[Path, bytes]]:
+    """The fonts among `paths`: `folder/*` also gives licenses, readmes and folders. A file
+    named like a font always counts: a damaged one has to fail, or a family would be built
+    without it."""
+    fonts = []
+    for path in paths:
+        if os.path.isdir(path):
+            log(f"skipped {path.name or path}: a folder")
+            continue
+        try:
+            data = path.read_bytes()
+        except OSError as e:
+            raise FontmintError(f"{path.name}: {e.strerror or e}") from e
+        if path.suffix.lower() in FONT_SUFFIXES or data[:4] in FONT_SIGNATURES:
+            fonts.append((path, data))
+        else:
+            log(f"skipped {path.name}: not a font")
+    if not fonts:
+        raise FontmintError("no fonts to read; give TTF, OTF or WOFF2 files (folders aren't searched)")
+    return fonts
 
 
 def positive_int(value: str) -> int:
@@ -92,7 +111,7 @@ def write_files(files: dict[str, bytes], out: Path) -> None:
     # the run halfway through writing.
     for folder in sorted({(out / rel).parent for rel in files}):
         check_writable(folder)
-    for rel, data in sorted(files.items()):
+    for rel, data in files.items():
         path = out / rel
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -122,9 +141,9 @@ def collect_axes(args: argparse.Namespace) -> dict[str, str]:
     return axes
 
 
-def show_info(path: Path) -> None:
+def show_info(path: Path, data: bytes) -> None:
     try:
-        info = core.inspect(read_font(path))
+        info = core.inspect(data)
     except FontmintError as e:
         raise FontmintError(f"{path.name}: {e}") from e
 
@@ -266,9 +285,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> None:
+    fonts = read_fonts(args.fonts)
     if args.info:
-        for path in args.fonts:
-            show_info(path)
+        for path, data in fonts:
+            show_info(path, data)
         return
 
     options = core.Options(
@@ -291,11 +311,14 @@ def run(args: argparse.Namespace) -> None:
     # Prepare and build everything before writing, so a failure never leaves a
     # half-finished build behind.
     prepared_fonts: list[tuple[Path, core.Prepared]] = []
-    for path in args.fonts:
+    entries: list[report.Entry] = []
+    for path, data in fonts:
         try:
-            prepared_fonts.append((path, core.prepare(read_font(path), options)))
+            prepared = core.prepare(data, options)
         except FontmintError as e:
             raise FontmintError(f"{path.name}: {e}") from e
+        prepared_fonts.append((path, prepared))
+        entries.append(report.make_entry(path.name, data, [options], prepared))
 
     core.check_clashes([core.output_paths(prepared) for _, prepared in prepared_fonts])
 
@@ -306,17 +329,8 @@ def run(args: argparse.Namespace) -> None:
                 f"  warning: {out / prepared.folder} already exists; files from earlier runs are kept unless this run "
                 "replaces them"
             )
-        if options.features:
-            language = f" ({options.language})" if options.language else ""
-            log(f"  froze {options.features}{language}: {prepared.frozen} characters remapped")
-        if options.disable:
-            log(f"  disabled {options.disable}")
-        if options.line_height is not None:
-            log(f"  line height {options.line_height:g}")
-        if options.letter_spacing:
-            log(f"  letter spacing {options.letter_spacing:+g} em")
-        if prepared.subset:
-            log(f"  subset {options.subset}: kept {prepared.subset[0]} of {prepared.subset[1]} characters")
+        for line in report.log_lines(options, prepared):
+            log(f"  {line}")
         for w in prepared.warnings:
             log(f"  warning: {w}")
 
@@ -336,6 +350,10 @@ def run(args: argparse.Namespace) -> None:
                 except Exception as e:  # FontmintError or a library error inside a worker
                     pool.shutdown(wait=False, cancel_futures=True)
                     raise FontmintError(f"{path.name}: {job.stem}: {e}") from e
+
+    made_with = f"fontmint {__version__} (https://github.com/svipas/fontmint)"
+    reports = report.render(entries, files, made_with)
+    files = dict(sorted(files.items())) | reports
 
     log(f"writing to {out}/")
     write_files(files, out)

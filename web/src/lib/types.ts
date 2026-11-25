@@ -52,7 +52,10 @@ export type WebOptions = {
 export type Format = "ttf" | "otf" | "woff2";
 
 /** What prepare() planned for one font. */
-export type Plan = { paths: string[]; jobs: number; folder: string };
+export type Plan = { paths: string[]; jobs: number; folder: string; entry: ReportEntry };
+
+/** One font's part of the report (report.Entry), handed back to Python as it is. */
+export type ReportEntry = Record<string, unknown>;
 
 export type BuildEvent =
   | { type: "log"; font: string; text: string; warning: boolean }

@@ -21,6 +21,7 @@ Only the standard library's `unittest` is used - don't add pytest or other test 
 | `tests/test_metrics.py`  | line height and letter spacing                                                 |
 | `tests/test_subset.py`   | subset presets, ranges, what's kept                                            |
 | `tests/test_core.py`     | end-to-end outputs for every mode, option errors, native helpers stay unloaded |
+| `tests/test_report.py`   | what `fontmint.txt` says, and that the command line reads its commands back    |
 | `tests/test_cli.py`      | the real command in a temp dir, `--info`, error messages + exit codes          |
 
 ## Fixtures

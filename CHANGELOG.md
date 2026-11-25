@@ -2,6 +2,12 @@
 
 What changed in fontmint's command line and library, per version. The website has its own versions: [web/CHANGELOG.md](web/CHANGELOG.md).
 
+## 0.2.0
+
+- Every build comes with a `fontmint.txt` in its folder: what it was made from, what was changed, and the command that makes it again.
+- Files that aren't fonts are skipped instead of stopping the run, so `fontmint folder/*` works next to a license or a readme. A damaged font still stops it.
+- The file name of a custom-range variable font no longer depends on the order its axes were given in (`--axis` options, or `axes` in the library).
+
 ## 0.1.0
 
 Initial release.

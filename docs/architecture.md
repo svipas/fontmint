@@ -24,7 +24,8 @@ ProcessPoolExecutor ─ Job ─▶  build_job(Job) → {path: bytes}
                                  ├─ kind="variable" → TTF/WOFF2 of the custom-range font
                                  └─ kind="static"   → set_static_names, mark_monospaced, hinting
                                                       (keep/strip or ttfautohint), ttf_to_otf, WOFF2
-write every file at the end
+report.render(every font's entry, files) ─▶ {folder/fontmint.txt: text}
+write every file at the end, the reports last
 ```
 
 The CLI writes nothing until every input is prepared and every job has succeeded, so a failure never leaves partial output. Library users get the same steps, run one after another, from `mint(font_bytes, options)`.
@@ -59,6 +60,7 @@ The CLI writes nothing until every input is prepared and every job has succeeded
 | `subset.py`   | drop names or hinting, or features that still have glyphs    |
 | `axes.py`     | know about output formats                                    |
 | `convert.py`  | import native helpers at module level                        |
+| `report.py`   | print, exit, use the filesystem or the clock; change a font  |
 | `core.py`     | print, exit, or use the filesystem                           |
 | `cli.py`      | contain font logic                                           |
 
@@ -86,8 +88,8 @@ Decisions that aren't visible in the code:
 
 - **Why Pyodide.** The core is already bytes in, bytes out, so the browser runs the code the CLI runs. A rewrite would have to re-verify freezing and its repairs; HarfBuzz in WebAssembly can subset and instance, but not freeze or rename.
 - **How fontmint gets in.** Pyodide's own fontTools is too old for fontmint, and installing `fontmint` with its dependencies would make micropip fetch `fonttools[woff]` from PyPI, which wants a brotli and zopfli that have no WebAssembly builds. So Pyodide loads its own `micropip` and `brotli`, and a pinned pure-Python fontTools wheel and the fontmint wheel are installed from Pyodide's file system with `deps=False`. Zopfli isn't needed: WOFF2 uses only brotli. Every file is served by the site itself, checked against pinned hashes by `scripts/assets.ts`; the browser never asks a CDN or PyPI.
-- **Never hinted, no static OTF.** ttfautohint-py and cffsubr run bundled programs through `subprocess`, and skia-pathops is a C extension Pyodide doesn't ship. The glue always sets `hint=False` and refuses `otf` for TrueType variable input. Static OTF without overlap removal and subroutinization would be possible, but worse than the CLI's (unmerged overlaps, about twice the size), so the page points to the CLI instead. CFF2 variable fonts keep `otf`, as they never need a helper. A source's own hinting would survive without ttfautohint, but the page can't tell hinted sources apart yet.
-- **One worker per font,** at most 4 and one fewer than the CPU cores; each holds about 140 MB of WebAssembly memory. Workers prepare their fonts, then one runs `core.check_clashes` over every input's output paths (the reason it moved out of `cli.py`), and only then do they build - the CLI's "check everything, then write" rule. One worker zips everything with Python's `zipfile`, in the CLI's folder layout.
+- **Never hinted, no static OTF.** ttfautohint-py and cffsubr run bundled programs through `subprocess`, and skia-pathops is a C extension Pyodide doesn't ship. For variable input, the glue always sets `hint=False`; it refuses `otf` unless the font has CFF2 outlines. Static OTF without overlap removal and subroutinization would be possible, but worse than the CLI's (unmerged overlaps, about twice the size), so the page points to the CLI instead. CFF2 variable fonts keep `otf`, as they never need a helper. A source's own hinting would survive without ttfautohint, but the page can't tell hinted sources apart yet.
+- **One worker per font,** at most 4 and one fewer than the CPU cores; each holds about 140 MB of WebAssembly memory. Workers prepare their fonts, then one runs `core.check_clashes` over every input's output paths (the reason it moved out of `cli.py`), and only then do they build - the CLI's "check everything, then write" rule. One worker zips everything with Python's `zipfile`, in the CLI's folder layout. It also writes the report, from each font's `report.Entry`: plain data that `prepare()` returns, as the plans stay in the worker that made them.
 - **Fresh workers per build.** WebAssembly memory never shrinks, so every build ends its workers, and Cancel terminates them. The worker that read the fonts builds the first one; the others start only once it has Pyodide, so they load it from the browser cache instead of downloading 14.5 MB each. A worker that can't load Pyodide, or crashes, is replaced on the next call. Pyodide reports some failures (its `.wasm` file not arriving) outside the promise it returned, so `worker.ts` forwards unhandled errors as a `crash` message instead of leaving the page waiting.
 - **The worker is a second entry point.** Bun's bundler doesn't follow `new Worker(...)`: `build.ts` builds `src/worker.ts` as `worker.js`, and `dev.ts` builds it on request. The glue module is bundled into it as text and written into Pyodide's file system.
 - **The preview needs no Python.** The dropped font is loaded with the `FontFace` API and shown with CSS `font-feature-settings` and `font-variation-settings`. `describe()` lists, per feature, the characters freezing it swaps (`features.changed_characters`); the page marks them with the CSS Custom Highlight API, which paints over the text without splitting it into elements, so shaping is unchanged. After a build, the preview shows the built font itself, without CSS features.

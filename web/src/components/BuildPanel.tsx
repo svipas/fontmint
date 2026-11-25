@@ -152,7 +152,7 @@ function Status({ build }: { build: BuildState }) {
     return (
       <p className="flex items-center gap-1.5 text-sm text-muted-foreground" aria-live="polite">
         <CheckIcon className="size-4 text-primary" aria-hidden="true" />
-        Built {build.files} {build.files === 1 ? "file" : "files"} in {duration(build.seconds)}.
+        Built {build.files} {build.files === 1 ? "font file" : "font files"} in {duration(build.seconds)}.
         {preview && " The preview now shows your build."}
       </p>
     );

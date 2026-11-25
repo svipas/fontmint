@@ -11,6 +11,7 @@ test("compares the variable font when there is one", () => {
     paths: ["A/variable/A[wght].ttf", "A/variable/A[wght].woff2", "A/static/A-Bold"],
     jobs: 1,
     folder: "A",
+    entry: {},
   };
   const files = {
     "A/variable/A[wght].ttf": bytes(),
@@ -21,7 +22,7 @@ test("compares the variable font when there is one", () => {
 });
 
 test("otherwise the first static font, at its axis values", () => {
-  const plan = { paths: ["A/static/A-Bold", "A/static/A-Black"], jobs: 2, folder: "A" };
+  const plan = { paths: ["A/static/A-Bold", "A/static/A-Black"], jobs: 2, folder: "A", entry: {} };
   const files = { "A/woff2-unhinted/A-Bold.woff2": bytes(), "A/ttf-unhinted/A-Bold.ttf": bytes() };
   expect(pickOutput(plan, files, new Map([["A-Bold", { wght: 700 }]]))).toEqual({
     path: "A/ttf-unhinted/A-Bold.ttf",
@@ -30,7 +31,7 @@ test("otherwise the first static font, at its axis values", () => {
 });
 
 test("nothing to compare", () => {
-  expect(pickOutput({ paths: [], jobs: 0, folder: "A" }, {}, new Map())).toBeNull();
+  expect(pickOutput({ paths: [], jobs: 0, folder: "A", entry: {} }, {}, new Map())).toBeNull();
 });
 
 test("each buffer is transferred once", () => {
@@ -95,6 +96,19 @@ test("an axis's default comes from the first font that has it", () => {
     },
   ];
   expect(defaultAxes(fonts)).toEqual({ wght: 400, opsz: 14 });
+});
+
+const add = (...names: string[]) => useStore.getState().addFiles(names.map((name) => new File(["text"], name)));
+
+test("skipped files are named, the first few of them", async () => {
+  useStore.setState({ fonts: [], notice: null });
+  await add("OFL.txt", "static");
+  expect(useStore.getState().notice).toBe("Skipped, not font files: OFL.txt, static");
+  await add("1", "2", "3", "4", "5", "6");
+  expect(useStore.getState().notice).toBe("Skipped, not font files: 1, 2, 3, 4, 5, 6");
+  await add("1", "2", "3", "4", "5", "6", "7");
+  expect(useStore.getState().notice).toBe("Skipped, not font files: 1, 2, 3, 4, 5 and 2 more");
+  expect(useStore.getState().fonts).toEqual([]);
 });
 
 test("the name follows the fonts' suggestion until the user changes it", () => {

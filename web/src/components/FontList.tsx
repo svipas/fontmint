@@ -104,7 +104,9 @@ export function FontList() {
             </AlertDescription>
           </Alert>
         )}
-        {notice && <p className="text-xs text-muted-foreground">{notice}</p>}
+        <div aria-live="polite" className="empty:mb-0">
+          {notice && <p className="text-xs wrap-anywhere text-muted-foreground">{notice}</p>}
+        </div>
         <ReadyStatus />
       </CardContent>
     </Card>

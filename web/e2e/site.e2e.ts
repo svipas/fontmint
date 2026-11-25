@@ -33,7 +33,7 @@ test("freeze a feature, rename and download the family", async ({ page }) => {
   await buildButton(page).click();
   const download = page.getByRole("link", { name: /Download MintSans\.zip/ });
   await expect(download).toBeVisible();
-  await expect(page.getByText(/Built 20 files in/)).toBeVisible();
+  await expect(page.getByText(/Built 20 font files in/)).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Preview text in your build" })).toBeVisible();
 
   const [file] = await Promise.all([page.waitForEvent("download"), download.click()]);
@@ -41,7 +41,8 @@ test("freeze a feature, rename and download the family", async ({ page }) => {
   expect(names).toContain("MintSans/variable/MintSans[wght,wdth].ttf");
   expect(names).toContain("MintSans/variable/MintSans-Italic[wght,wdth].woff2");
   expect(names).toContain("MintSans/ttf-unhinted/MintSans-BoldItalic.ttf");
-  expect(names).toHaveLength(20);
+  expect(names).toContain("MintSans/fontmint.txt");
+  expect(names).toHaveLength(21);
 });
 
 test("fonts added together appear together, upright first", async ({ page }) => {
@@ -66,7 +67,7 @@ test("one static font at weight 375, named Book", async ({ page }) => {
   await page.getByText("WOFF2", { exact: true }).click();
   await buildButton(page).click();
 
-  await expect(page.getByText(/Built 1 file in/)).toBeVisible();
+  await expect(page.getByText(/Built 1 font file in/)).toBeVisible();
   await expect(page.getByLabel("Build log")).toContainText("MintSans-Book (wght 375");
 
   // The button in the pinned bar takes you down to the log.
@@ -88,7 +89,7 @@ test("two named static fonts in one build", async ({ page }) => {
   await second.getByRole("textbox", { name: "Style name" }).fill("Bold");
   await buildButton(page).click();
 
-  await expect(page.getByText(/Built 4 files in/)).toBeVisible();
+  await expect(page.getByText(/Built 4 font files in/)).toBeVisible();
   const log = page.getByLabel("Build log");
   await expect(log).toContainText("MintSans-Regular (wght 375");
   await expect(log).toContainText("MintSans-Bold (wght 675");
@@ -157,6 +158,26 @@ test("a dropped file is added once", async ({ page }) => {
   await expect(page.getByRole("listitem")).toHaveCount(1);
 });
 
+test("dropped files that aren't fonts are skipped", async ({ page }) => {
+  await page.goto("./");
+  const drop = (...dropped: string[]) =>
+    page.locator("main").evaluate((area, fileNames) => {
+      const dataTransfer = new DataTransfer();
+      for (const name of fileNames) dataTransfer.items.add(new File(["text"], name));
+      area.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer }));
+    }, dropped);
+  await drop("fontmint.txt");
+  await expect(page.getByText("Skipped, not font files: fontmint.txt")).toBeVisible();
+  // A long name wraps instead of widening the page.
+  await page.setViewportSize({ width: 390, height: 800 });
+  await drop(`${"a".repeat(120)}.txt`);
+  await expect(page.getByText(/aaa\.txt/)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await drop("OFL.txt", "Dropped.TTF");
+  await expect(page.getByText("Skipped, not font files: OFL.txt")).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: /\.(ttf|txt)/i })).toHaveCount(1);
+});
+
 test("the theme choice is kept", async ({ page }) => {
   await page.goto("./");
   await page.getByRole("button", { name: "Dark" }).click();
@@ -171,7 +192,7 @@ test("static input passes through as one file", async ({ page }) => {
   await addFonts(page, fonts.static);
   await nameField(page).fill("Mint Sans");
   await buildButton(page).click();
-  await expect(page.getByText(/Built 1 file in/)).toBeVisible();
+  await expect(page.getByText(/Built 1 font file in/)).toBeVisible();
 });
 
 test("the page stays put as the preview changes", async ({ page }) => {
