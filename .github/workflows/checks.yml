@@ -52,7 +52,7 @@ jobs:
         working-directory: .
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       - run: bun install --frozen-lockfile
       - uses: actions/cache@v4
         with:
@@ -60,11 +60,10 @@ jobs:
           key: web-assets-${{ hashFiles('web/scripts/assets.ts') }}
       - run: bun run assets
 
-      - run: bunx oxfmt --check
-      - run: web/node_modules/.bin/oxfmt --check README.md AGENTS.md CHANGELOG.md docs
+      - run: bun fmt --check
         working-directory: .
       - run: bun run lint --deny-warnings
-      - run: bun run typecheck
+      - run: bun check
       - run: bun test
       - run: bun run smoke
       - run: bun run build

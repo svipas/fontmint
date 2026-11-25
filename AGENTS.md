@@ -95,7 +95,7 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 - Build test fonts with `tests/fixtures.py`. Never commit binary font files.
 - When refactoring, prove outputs didn't change by comparing font tables before and after: [docs/testing.md](docs/testing.md).
 - For changes that touch real-world font structure (composites, overlaps, many lookups), also run a real family such as Inter once. The synthetic fixtures can't cover everything.
-- For changes in `web/` (or to `fontmint/`, which the page runs), in `web/`: `bunx oxfmt`, `bun run lint`, `bun run typecheck`, `bun test` (unit and component tests), `bun run smoke` (fontmint in Pyodide), and `bun run build && bun run e2e` (Playwright in Chromium and Firefox). CI runs all of these on pull requests and before each deploy.
+- For changes in `web/` (or to `fontmint/`, which the page runs), in `web/`: `bun fmt`, `bun run lint`, `bun check`, `bun test` (unit and component tests), `bun run smoke` (fontmint in Pyodide), and `bun run build && bun run e2e` (Playwright in Chromium and Firefox). CI runs all of these on pull requests and before each deploy.
 
 ## Changing behavior
 
@@ -111,7 +111,7 @@ How a font flows through these modules: [docs/architecture.md](docs/architecture
 - `docs/` holds decisions, constraints and traps that are hard to see from the code. Before adding a paragraph, ask what a maintainer would get wrong without it. If reading the code answers the question, leave it out.
 - When a documented rule changes, rewrite or remove the old text instead of appending a new account.
 - `CHANGELOG.md` lists what changed for users of the command line and library, per version; `web/CHANGELOG.md` does the same for the website. Add a line under the next version for every change a user can notice - in both when a core change shows on the website too.
-- Format Markdown with `npx --yes oxfmt README.md AGENTS.md CHANGELOG.md docs` (`--check` to verify without writing). `uv run ruff format` formats the Python examples in them.
+- Format Markdown with `bun fmt` in the repo root (`--check` to verify without writing); it formats the website and the workflows too, with the root `bunfig.toml`. `uv run ruff format` formats the Python examples in them.
 
 ## Releasing
 
@@ -133,6 +133,7 @@ The command line and the website have their own versions, tags and GitHub Releas
 - Python 3.11+ (fontTools 4.66 and newer need it), type hints, `from __future__ import annotations`, docstrings on public functions. Ruff formats and lints (settings in `pyproject.toml`); fix a finding rather than adding `# noqa`.
 - ty treats fontTools as `Any`: its tables get their attributes at runtime, where ty can't see them. Fix ty's findings in our own code rather than silencing them.
 - Standard library first. Python tests use `unittest`. Tooling goes in the `dev` dependency group, never in the package's `dependencies`.
+- The website's tooling: use what Bun has (`bun fmt`, `bun check`, `bun test`, its bundler) and add a package only for what it lacks. Linting is `oxlint` because released Bun has no `bun lint` yet; switch when it does.
 - The website: TypeScript, React with React Compiler (don't import `useMemo`, `useCallback` or `memo`; oxlint rejects them), Tailwind, exact versions in `web/package.json`. Build the page from the shadcn components in `web/src/components/ui/` (add missing ones with `bunx shadcn add`; it imports `cn` from a package named `cn` and adds that package to `package.json`, so point the import at `@/lib/utils` and remove the package); hand-write an element only where shadcn has nothing that fits, such as the drop area or the preview's text box.
 - Default to no comment. Write one for a constraint, an external quirk or an invariant the code can't show.
 - Errors are for the user: say what's wrong and how to fix it (`--weight expects …`, `add ttf or woff2 to formats`).
