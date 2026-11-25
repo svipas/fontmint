@@ -29,7 +29,12 @@ export class FontmintWorker {
     // A worker that dies (e.g. out of memory) fails every call still waiting.
     this.worker.addEventListener("error", (event) => {
       event.preventDefault();
-      this.stop(new Error(event.message || "the build stopped unexpectedly (the browser may be out of memory)"));
+      this.stop(
+        new Error(
+          event.message ||
+            "the build stopped unexpectedly (the browser may be out of memory: building with fewer workers needs less)",
+        ),
+      );
     });
     this.ready = this.call("start", {});
     // A worker that can't start (offline, a missing file) is of no use: every call still
@@ -49,8 +54,9 @@ export class FontmintWorker {
     return this.call("checkClashes", { outputs });
   }
 
-  build(name: string, onEvent: (e: BuildEvent) => void) {
-    return this.call("build", { name }, onEvent);
+  /** `source` is copied into the worker: other jobs start from it too. */
+  runJob(name: string, job: Uint8Array, source: Uint8Array, onEvent: (e: BuildEvent) => void) {
+    return this.call("runJob", { name, job, source }, onEvent);
   }
 
   /** Zips `files`, which are moved into the worker (they're unusable here afterwards), with the report. */

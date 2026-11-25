@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { CancelledError, FontmintWorker } from "./lib/client";
 import { emptyForm, type Form, suggestedName, webOptions } from "./lib/options";
+import { automaticWorkers, runTasks, saveWorkers, secondsLeft, storedWorkers } from "./lib/pool";
 import { loadFace } from "./lib/preview";
 import { type BuildEvent, type Files, type FontInfo, FontmintError, type Manifest, type Plan } from "./lib/types";
 
@@ -57,6 +58,8 @@ type State = {
   builtWith: Form | null;
   /** The preview simulates the options on the original ("live"), or shows the built font. */
   previewMode: PreviewMode;
+  /** How many workers a build uses at most; null for automatic. */
+  maxWorkers: number | null;
   /** A short note for the user, e.g. a font that was added twice. */
   notice: string | null;
 
@@ -67,6 +70,7 @@ type State = {
   setPreviewAxis(tag: string, value: number): void;
   resetPreviewAxes(): void;
   setPreviewMode(mode: PreviewMode): void;
+  setMaxWorkers(workers: number | null): void;
   startBuild(): Promise<void>;
   cancelBuild(): void;
 };
@@ -84,10 +88,9 @@ function primaryWorker(set: (state: Partial<State>) => void): FontmintWorker {
   return primary;
 }
 
-/** Workers for a build: one per font, up to the number of cores (at most 4, ~140 MB each). */
-function poolSize(fonts: number): number {
-  const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 2 : 2;
-  return Math.max(1, Math.min(fonts, 4, cores - 1));
+/** Starts more workers, until there's one per task or as many as the build may use. */
+function growPool(tasks: number, most: number): void {
+  while (workers.length < Math.min(tasks, most)) workers.push(new FontmintWorker());
 }
 
 function stopWorkers(): void {
@@ -119,6 +122,7 @@ export const useStore = create<State>()((set, get) => ({
   built: [],
   builtWith: null,
   previewMode: "live",
+  maxWorkers: storedWorkers(),
   notice: null,
 
   async addFiles(dropped) {
@@ -222,9 +226,15 @@ export const useStore = create<State>()((set, get) => ({
     set({ previewMode });
   },
 
+  setMaxWorkers(maxWorkers) {
+    saveWorkers(maxWorkers);
+    set({ maxWorkers });
+  },
+
   async startBuild() {
     const fonts = get().fonts.filter((f): f is FontEntry & { info: FontInfo } => f.info !== null);
     const { form } = get();
+    const mostWorkers = get().maxWorkers ?? automaticWorkers();
     const previous = get().build;
     if (previous.status === "done") URL.revokeObjectURL(previous.url);
     set({
@@ -243,7 +253,7 @@ export const useStore = create<State>()((set, get) => ({
       if (build.status === "running") set({ build: { ...build, ...change } });
     };
     const locations = new Map<string, Record<string, number>>();
-    let buildingSince = 0;
+    const finished: number[] = []; // seconds each job took
     const onEvent = (event: BuildEvent) => {
       if (event.type === "log") {
         set({ log: [...get().log, { text: `${event.font}: ${event.text}`, warning: event.warning }] });
@@ -253,9 +263,9 @@ export const useStore = create<State>()((set, get) => ({
         if (event.location) locations.set(event.style, event.location);
         const build = get().build;
         if (build.status === "running") {
-          const done = build.done + 1;
-          const elapsed = (performance.now() - buildingSince) / 1000;
-          running({ done, left: (elapsed / done) * (build.total - done) });
+          finished.push(event.seconds);
+          const working = workers.filter((worker) => !worker.stopped).length;
+          running({ done: finished.length, left: secondsLeft(finished, build.total, working) });
         }
         set({
           log: [
@@ -273,41 +283,38 @@ export const useStore = create<State>()((set, get) => ({
       const first = primaryWorker(set);
       await first.ready;
       // More workers start only now, so they load Pyodide from the browser cache.
-      workers = [first, ...Array.from({ length: poolSize(fonts.length) - 1 }, () => new FontmintWorker())];
+      workers = [first];
+      growPool(fonts.length, mostWorkers);
 
       running({ stage: "preparing" });
       const plans = new Map<string, Plan>();
-      await Promise.all(
-        workers.map(async (worker, w) => {
-          for (const [i, font] of fonts.entries()) {
-            if (i % workers.length !== w) continue;
-            plans.set(font.name, await worker.prepare(font.name, font.bytes, webOptions(form, font.info), onEvent));
-          }
+      await runTasks(
+        workers,
+        fonts.map((font) => async (worker) => {
+          plans.set(font.name, await worker.prepare(font.name, font.bytes, webOptions(form, font.info), onEvent));
         }),
       );
       await first.checkClashes(fonts.map((f) => plans.get(f.name)!.paths));
 
-      const total = [...plans.values()].reduce((sum, plan) => sum + plan.jobs, 0);
-      buildingSince = performance.now();
+      const files: Files = {};
+      const jobs = fonts.flatMap((font) => {
+        const plan = plans.get(font.name)!;
+        Object.assign(files, plan.files);
+        return plan.jobs.map(({ job, source }) => async (worker: FontmintWorker) => {
+          Object.assign(files, await worker.runJob(font.name, job, plan.sources[source]!, onEvent));
+        });
+      });
+      const total = jobs.length;
+      growPool(total, mostWorkers);
       running({ stage: "building", total });
       if (total) {
         const fontsWord = total === 1 ? "font" : "fonts";
-        const workersWord = workers.length === 1 ? "worker" : "workers";
+        const most = workers.length === 1 ? "1 worker" : `up to ${workers.length} workers`;
         set({
-          log: [
-            ...get().log,
-            { text: `building ${total} ${fontsWord} with ${workers.length} ${workersWord}…`, warning: false },
-          ],
+          log: [...get().log, { text: `building ${total} ${fontsWord} with ${most}…`, warning: false }],
         });
       }
-      const files: Files = {};
-      await Promise.all(
-        workers.map(async (worker, w) => {
-          for (const [i, font] of fonts.entries()) {
-            if (i % workers.length === w) Object.assign(files, await worker.build(font.name, onEvent));
-          }
-        }),
-      );
+      await runTasks(workers, jobs);
 
       // Before zipping, which moves the files into the worker.
       const built = (
@@ -410,15 +417,19 @@ export function orderByName(fonts: FontEntry[]): FontEntry[] {
 /** The built file to compare with the original: the variable font when there is one,
  * otherwise the first font built, with its axis values. */
 export function pickOutput(
-  plan: Plan,
+  plan: Pick<Plan, "paths">,
   files: Files,
   locations: Map<string, Record<string, number>>,
 ): { path: string; location: Record<string, number> } | null {
   for (const path of plan.paths) {
     if (files[path]) return { path, location: {} };
-    const stem = path.split("/").pop()!;
+    const [folder, , stem] = path.split("/") as [string, string, string];
     for (const extension of [".ttf", ".otf", ".woff2"]) {
-      const built = Object.keys(files).find((p) => p.endsWith(`/${stem}${extension}`));
+      // In a folder of its own (ttf-unhinted/…): a static font passing through isn't what a job built.
+      const built = Object.keys(files).find((p) => {
+        const parts = p.split("/");
+        return parts.length === 3 && parts[0] === folder && parts[2] === stem + extension;
+      });
       if (built) return { path: built, location: locations.get(stem) ?? {} };
     }
   }

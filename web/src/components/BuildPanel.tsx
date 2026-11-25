@@ -69,10 +69,11 @@ export function BuildPanel() {
               <a
                 href={build.url}
                 download={build.fileName}
-                className={buttonVariants({ variant: "secondary", size: "lg" })}
+                className={cn(buttonVariants({ variant: "secondary", size: "lg" }), "max-w-full")}
               >
                 <DownloadIcon />
-                Download {build.fileName} · {fileSize(build.size)}
+                <span className="truncate">Download {build.fileName}</span>{" "}
+                <span className="shrink-0">· {fileSize(build.size)}</span>
               </a>
             )}
             {build.status !== "running" &&

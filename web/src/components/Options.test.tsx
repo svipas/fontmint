@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { resetStore, withFonts } from "../../test/store";
 import { emptyForm } from "../lib/options";
+import { storedWorkers } from "../lib/pool";
 import { useStore } from "../store";
 import { Options, sampleCharacters } from "./Options";
 
@@ -171,6 +172,21 @@ test("each section resets its own options, and offers it only while something is
   fireEvent.click(reset("Reset spacing")!);
   fireEvent.click(reset("Reset characters")!);
   expect(useStore.getState().form).toEqual({ ...emptyForm, name: "Mint Sans" });
+});
+
+test("the number of workers is kept, and reset with the output", () => {
+  withFonts({});
+  const { unmount } = render(<Options />);
+  fireEvent.click(screen.getByRole("button", { name: "Workers" }));
+  expect(screen.getByLabelText(/Fonts built at the same time/).textContent).toStartWith("Automatic (");
+  act(() => useStore.getState().setMaxWorkers(3));
+  expect(storedWorkers()).toBe(3);
+  unmount();
+  render(<Options />);
+  expect(screen.getByLabelText(/Fonts built at the same time/).textContent).toStartWith("3"); // opens by itself
+  fireEvent.click(screen.getByRole("button", { name: "Reset output" }));
+  expect(useStore.getState().maxWorkers).toBeNull();
+  expect(storedWorkers()).toBeNull();
 });
 
 test("custom styles count as a change to the output", () => {

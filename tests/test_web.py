@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
-from fontmint import FontmintError
+from fontmint import FontmintError, Options, mint
 
 from . import fixtures as fx
 
@@ -21,9 +21,16 @@ import fontmint_web as web  # noqa: E402
 def run(font: bytes, options: dict, name: str = "TestSans.ttf") -> tuple[list[str], dict, list[dict]]:
     """prepare() + build() one font: (planned paths, files, reported events)."""
     events: list[dict] = []
-    paths = web.prepare(name, font, options, events.append)["paths"]
-    files = web.build(name, events.append)
-    return paths, files, events
+    plan = web.prepare(name, font, options, events.append)
+    return plan["paths"], build(plan, name, events.append), events
+
+
+def build(plan: dict, name: str = "TestSans.ttf", report=lambda event: None) -> dict[str, bytes]:
+    """Every file of a plan, as the page's workers build it: job by job."""
+    files = dict(plan["files"])
+    for job in plan["jobs"]:
+        files |= web.run_job(name, job["job"], plan["sources"][job["source"]], report)
+    return files
 
 
 def logged(events: list[dict], warning: bool = False) -> list[str]:
@@ -60,14 +67,16 @@ class VariableBuildTest(unittest.TestCase):
 
         self.assertEqual({p.split("/")[1] for p in files}, {"variable", "ttf-unhinted", "woff2-unhinted"})
         self.assertEqual(len(files), 2 + 4 * 2)  # variable TTF + WOFF2, 4 named instances × 2 formats
-        self.assertEqual(len(paths), 2 + 4)  # files ready now + one per job
+        self.assertEqual(len(paths), 1 + 5)  # the variable TTF, ready now + one per job
         self.assertEqual(logged(events), ["froze ss01: 2 characters remapped"])
         jobs = [e for e in events if e["type"] == "job"]
-        self.assertEqual([(e["done"], e["total"]) for e in jobs], [(1, 4), (2, 4), (3, 4), (4, 4)])
-        self.assertEqual(jobs[0]["style"], "MintSans-Regular")
+        # The variable font's WOFF2 first: it can take the longest.
+        self.assertEqual([e["style"] for e in jobs[:2]], ["MintSans[wght,wdth]", "MintSans-Regular"])
+        self.assertEqual(len(jobs), 5)
         self.assertEqual(jobs[0]["font"], "TestSans.ttf")
-        self.assertEqual(jobs[1]["location"], {"wght": 700, "wdth": 100})
-        self.assertEqual(jobs[1]["where"], "wght 700, wdth 100")
+        self.assertNotIn("location", jobs[0])
+        self.assertEqual(jobs[2]["location"], {"wght": 700, "wdth": 100})
+        self.assertEqual(jobs[2]["where"], "wght 700, wdth 100")
 
     def test_jobs_say_where_on_the_axes(self):
         _, _, events = run(fx.variable_ttf(), {"name": "Mint Sans", "axes": {"wght": "375,300:700"}, "style_name": ""})
@@ -84,8 +93,8 @@ class VariableBuildTest(unittest.TestCase):
         )
         self.assertEqual(len(paths), 2)
         self.assertEqual(
-            [(e["style"], e["where"], e["done"], e["total"]) for e in events if e["type"] == "job"],
-            [("MintSans-Regular", "wght 375, wdth 100", 1, 2), ("MintSans-Bold", "wght 675, wdth 100", 2, 2)],
+            [(e["style"], e["where"]) for e in events if e["type"] == "job"],
+            [("MintSans-Regular", "wght 375, wdth 100"), ("MintSans-Bold", "wght 675, wdth 100")],
         )
         self.assertEqual(logged(events, warning=True), [])
 
@@ -94,9 +103,25 @@ class VariableBuildTest(unittest.TestCase):
         with self.assertRaisesRegex(FontmintError, "^TestSans.ttf: two styles would both build MintSans-Book: "):
             web.prepare("TestSans.ttf", fx.variable_ttf(), {"name": "Mint Sans", "styles": styles}, print)
 
-    def test_prepare_counts_jobs(self):
-        plan = web.prepare("TestSans.ttf", fx.variable_ttf(), {"name": "Mint Sans"}, print)
-        self.assertEqual((plan["jobs"], plan["folder"]), (4, "MintSans"))
+    def test_jobs_share_their_source(self):
+        styles = [{"axes": {"wght": "375"}, "style_name": "Regular"}, {"axes": {"wght": "675"}, "style_name": "Bold"}]
+        plan = web.prepare("TestSans.ttf", fx.variable_ttf(), {"name": "Mint Sans", "styles": styles}, print)
+        self.assertEqual([len(plan["jobs"]), len(plan["sources"])], [2, 1])
+        # The whole variable font has the letter spacing already; the jobs add it themselves.
+        options = {"name": "Mint Sans", "letter_spacing": 0.1}
+        plan = web.prepare("TestSans.ttf", fx.variable_ttf(), options, lambda event: None)
+        self.assertEqual([job["source"] for job in plan["jobs"]], [0, 1, 1, 1, 1])
+
+    def test_the_font_is_not_checked_again(self):
+        with mock.patch("fontTools.ttLib.TTFont.ensureDecompiled", side_effect=AssertionError("checked")):
+            web.prepare("TestSans.ttf", fx.variable_ttf(), {"name": "Mint Sans"}, print)
+
+    def test_builds_what_the_library_builds(self):
+        options: dict = {"features": "ss01", "name": "Mint Sans", "letter_spacing": 0.1, "formats": ["ttf", "woff2"]}
+        with mock.patch.dict("os.environ", SOURCE_DATE_EPOCH="0"):
+            _, files, _ = run(fx.variable_ttf(hinted=True), options)
+            expected = mint(fx.variable_ttf(hinted=True), Options(**options, hint=False))
+        self.assertEqual(files, expected)
 
     def test_formats_and_axes(self):
         _, files, _ = run(fx.variable_ttf(), {"name": "Mint Sans", "formats": ["woff2"], "axes": {"wght": "300:700"}})
@@ -119,12 +144,20 @@ class VariableBuildTest(unittest.TestCase):
             web.prepare("TestSans.ttf", fx.variable_ttf(), {"line_height": 9}, print)
 
     def test_failed_job_names_the_file_and_style(self):
-        web.prepare("TestSans.ttf", fx.variable_ttf(), {"name": "Mint Sans"}, print)
+        plan = web.prepare("TestSans.ttf", fx.variable_ttf(), {"name": "Mint Sans", "formats": ["ttf"]}, print)
         with (
             mock.patch("fontmint_web.build_job", side_effect=ValueError("broken outline")),
             self.assertRaisesRegex(FontmintError, "^TestSans.ttf: MintSans-Regular: broken outline"),
         ):
-            web.build("TestSans.ttf", print)
+            build(plan)
+
+    def test_running_out_of_memory_says_what_to_do(self):
+        plan = web.prepare("TestSans.ttf", fx.variable_ttf(), {"name": "Mint Sans", "formats": ["ttf"]}, print)
+        with (
+            mock.patch("fontmint_web.build_job", side_effect=MemoryError),
+            self.assertRaisesRegex(FontmintError, "MintSans-Regular: out of memory; build with fewer workers"),
+        ):
+            build(plan)
 
 
 class Cff2BuildTest(unittest.TestCase):
@@ -150,16 +183,6 @@ class StaticInputTest(unittest.TestCase):
 
 
 class ClashAndZipTest(unittest.TestCase):
-    def test_one_worker_several_fonts(self):
-        events: list[dict] = []
-        web.prepare("Upright.ttf", fx.variable_ttf(), {"name": "Mint Sans", "static": False}, events.append)
-        web.prepare("Italic.ttf", fx.variable_ttf(italic=True), {"name": "Mint Sans", "static": False}, events.append)
-        self.assertEqual(
-            list(web.build("Italic.ttf", print)),
-            ["MintSans/variable/MintSans-Italic[wght,wdth].ttf", "MintSans/variable/MintSans-Italic[wght,wdth].woff2"],
-        )
-        self.assertEqual(len(web.build("Upright.ttf", print)), 2)
-
     def test_two_inputs_writing_the_same_file(self):
         paths = web.prepare("TestSans.ttf", fx.variable_ttf(), {"name": "Mint Sans"}, print)["paths"]
         with self.assertRaisesRegex(FontmintError, "two inputs would both write"):
@@ -176,9 +199,9 @@ class ClashAndZipTest(unittest.TestCase):
     def test_zip_has_a_report(self):
         styles = [{"axes": {"wght": "375"}, "style_name": "Regular"}, {"axes": {"wght": "675"}, "style_name": "Bold"}]
         options = {"name": "Mint Sans", "formats": ["ttf", "woff2"], "styles": styles}
-        entry = web.prepare("TestSans.ttf", fx.variable_ttf(), options, lambda event: None)["entry"]
-        entry = json.loads(json.dumps(entry))  # plain values only: it goes through JavaScript
-        files = web.build("TestSans.ttf", lambda event: None)
+        plan = web.prepare("TestSans.ttf", fx.variable_ttf(), options, lambda event: None)
+        entry = json.loads(json.dumps(plan["entry"]))  # plain values only: it goes through JavaScript
+        files = build(plan)
         archive = zipfile.ZipFile(io.BytesIO(web.zip_files(files, [entry], "1.2.3", lambda event: None)))
         self.assertEqual(archive.namelist(), sorted([*files, "MintSans/fontmint.txt"]))
         report = archive.read("MintSans/fontmint.txt").decode()
@@ -198,8 +221,9 @@ class NativeHelpersTest(unittest.TestCase):
             "import fontmint_web as web\n"
             "from tests import fixtures as fx\n"
             "for font in (fx.variable_ttf(), fx.variable_cff2(), fx.static_otf()):\n"
-            "    web.prepare('font', font, {'name': 'X'}, print)\n"
-            "    web.build('font', print)\n"
+            "    plan = web.prepare('font', font, {'name': 'X'}, print)\n"
+            "    for job in plan['jobs']:\n"
+            "        web.run_job('font', job['job'], plan['sources'][job['source']], print)\n"
             "print(sorted(m for m in ('ttfautohint', 'cffsubr', 'pathops') if m in sys.modules))\n"
         )
         out = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, check=True)

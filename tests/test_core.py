@@ -3,12 +3,14 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from fontTools.feaLib.builder import addOpenTypeFeaturesFromString
 from fontTools.misc.xmlWriter import XMLWriter
 from fontTools.ttLib import newTable
 
-from fontmint import FontmintError, Options, inspect, mint, prepare
+from fontmint import FontmintError, Options, build_job, inspect, mint, prepare
+from fontmint.common import load, to_bytes
 from fontmint.core import check_clashes, output_paths
 
 from . import fixtures as fx
@@ -131,6 +133,16 @@ class VariableDefaultTest(unittest.TestCase):
         self.assertEqual(vf["name"].getDebugName(0), fx.COPYRIGHT)
         self.assertEqual(fx.open_font(self.files["MintSans/variable/MintSans[wght,wdth].woff2"]).flavor, "woff2")
 
+    def test_the_variable_woff2_is_a_job(self):
+        for options in (Options(name="Mint Sans"), Options(name="Mint Sans", letter_spacing=0.1, static=False)):
+            prepared = prepare(fx.variable_ttf(), options)
+            ttf, woff2 = (f"MintSans/variable/MintSans[wght,wdth].{ext}" for ext in ("ttf", "woff2"))
+            self.assertEqual(list(prepared.files), [ttf])
+            self.assertEqual(output_paths(prepared)[:2], [ttf, woff2])
+            # The variable TTF as it is, only compressed: nothing is instanced, spaced or stamped again.
+            compressed = to_bytes(load(prepared.files[ttf], recalc=False), "woff2")
+            self.assertEqual(build_job(prepared.jobs[0]), {woff2: compressed})
+
     def test_hinting_only_in_hinted_folders(self):
         for path, data in self.files.items():
             font = fx.open_font(data)
@@ -178,6 +190,16 @@ class HintedVariableSourceTest(unittest.TestCase):
                 ),
                 folder,
             )
+
+    def test_unhinted_is_the_same_without_hinted_outputs(self):
+        options: dict = {"name": "Mint Sans", "axes": {"wght": "700"}}
+        with mock.patch.dict("os.environ", SOURCE_DATE_EPOCH="0"):
+            everything = mint(fx.variable_ttf(hinted=True), Options(**options))
+            for fewer in (Options(**options, hint=False), Options(**options, formats="otf")):
+                files = mint(fx.variable_ttf(hinted=True), fewer)
+                self.assertNotIn("ttf-hinted", folders(files))
+                for path, data in files.items():
+                    self.assertEqual(data, everything[path], path)
 
     def test_hinted_outputs_keep_the_designers_hinting(self):
         font = fx.open_font(self.files["MintSans/ttf-hinted/MintSans-Bold.ttf"])
@@ -571,6 +593,11 @@ class OutputClashTest(unittest.TestCase):
     def test_same_file_from_two_inputs(self):
         prepared = prepare(fx.variable_ttf(), Options(name="Mint Sans", axes={"wght": "400"}, hint=False))
         with self.assertRaisesRegex(FontmintError, "two inputs would both write MintSans-Regular into MintSans/"):
+            check_clashes([output_paths(prepared), output_paths(prepared)])
+
+    def test_same_variable_font_from_two_inputs(self):
+        prepared = prepare(fx.variable_ttf(), Options(name="Mint Sans", static=False, formats="woff2"))
+        with self.assertRaisesRegex(FontmintError, r"would both write MintSans\[wght,wdth\]\.woff2 into MintSans/"):
             check_clashes([output_paths(prepared), output_paths(prepared)])
 
     def test_different_files(self):

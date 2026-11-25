@@ -125,17 +125,63 @@ test("the message by Build takes you to the field to fix", async ({ page }) => {
 });
 
 test("a build can be cancelled", async ({ page }) => {
-  // Two fonts build on two workers. The second one starts loading Pyodide only when the
-  // build starts, and never gets it here, so the build is still running at Cancel.
-  await page.addInitScript(() => Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 4 }));
+  // The workers never get a job, so the build is still running at Cancel.
+  await page.addInitScript(() => {
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (this: Worker, message: { call?: string }, ...rest: []) {
+      if (message.call !== "runJob") post.call(this, message, ...rest);
+    };
+  });
   await addFonts(page, fonts.variable, fonts.italic);
   await nameField(page).fill("Mint Sans");
   await expect(buildButton(page)).toBeEnabled();
-  await page.route("**/pyodide.asm.wasm", () => {});
   await buildButton(page).click();
+  await expect(page.getByText(/0 of \d+ fonts/)).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(buildButton(page)).toBeEnabled();
   await expect(page.getByRole("link", { name: /Download/ })).toHaveCount(0);
+
+  // Also while the next build's first worker is still loading Pyodide, which never arrives.
+  await page.route("**/pyodide.asm.wasm", () => {});
+  await buildButton(page).click();
+  await expect(page.getByText("Getting fontmint ready…")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(buildButton(page)).toBeEnabled();
+});
+
+test("workers that can't start are left out of a build", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 4 });
+    let started = 0;
+    window.Worker = class extends Worker {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(started++ ? "missing.js" : url, options);
+      }
+    };
+  });
+  await addFonts(page, fonts.variable);
+  await nameField(page).fill("Mint Sans");
+  await buildButton(page).click();
+  await expect(page.getByText("building 5 fonts with up to 3 workers…")).toBeVisible();
+  await expect(page.getByText(/Built 10 font files in/)).toBeVisible();
+});
+
+test("a worker that crashes fails the build, and the next one works", async ({ page }) => {
+  await page.addInitScript(() => {
+    const post = Worker.prototype.postMessage;
+    let crashed = false;
+    Worker.prototype.postMessage = function (this: Worker, message: { call?: string }, ...rest: []) {
+      if (message.call !== "runJob" || crashed) return post.call(this, message, ...rest);
+      crashed = true;
+      setTimeout(() => this.dispatchEvent(new ErrorEvent("error")));
+    };
+  });
+  await addFonts(page, fonts.variable);
+  await nameField(page).fill("Mint Sans");
+  await buildButton(page).click();
+  await expect(page.getByText(/the build stopped unexpectedly .* fewer workers/)).toBeVisible();
+  await buildButton(page).click();
+  await expect(page.getByText(/Built 10 font files in/)).toBeVisible();
 });
 
 test("a file that isn't a font says so", async ({ page }) => {
@@ -193,6 +239,30 @@ test("static input passes through as one file", async ({ page }) => {
   await nameField(page).fill("Mint Sans");
   await buildButton(page).click();
   await expect(page.getByText(/Built 1 font file in/)).toBeVisible();
+});
+
+test("the number of workers is the user's choice, and remembered", async ({ page }) => {
+  await addFonts(page, fonts.variable);
+  await page.getByRole("button", { name: "Workers" }).click();
+  await page.getByLabel("Fonts built at the same time").click();
+  await page.getByRole("option", { name: "2", exact: true }).click();
+  await addFonts(page, fonts.variable);
+  await expect(page.getByLabel("Fonts built at the same time")).toHaveText(/^2/);
+  await nameField(page).fill("Mint Sans");
+  await buildButton(page).click();
+  await expect(page.getByText("building 5 fonts with up to 2 workers…")).toBeVisible();
+});
+
+test("a long download name stays inside its card on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await addFonts(page, fonts.static);
+  await nameField(page).fill("Mint Sans With A Very Long Name For Phones");
+  await buildButton(page).click();
+  const download = page.getByRole("link", { name: /Download MintSansWithAVeryLongNameForPhones\.zip · \d+ KB/ });
+  await expect(download).toBeVisible();
+  const link = (await download.boundingBox())!;
+  const card = (await page.locator("[data-slot=card]").filter({ has: download }).boundingBox())!;
+  expect(link.x + link.width).toBeLessThan(card.x + card.width - 8);
 });
 
 test("the page stays put as the preview changes", async ({ page }) => {

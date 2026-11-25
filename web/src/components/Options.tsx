@@ -29,6 +29,7 @@ import {
   SUBSETS,
   suggestedName,
 } from "@/lib/options";
+import { automaticWorkers, mostWorkers } from "@/lib/pool";
 import { featureSettings, variationSettings } from "@/lib/preview";
 import type { FontInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -510,6 +511,8 @@ function Characters({ errors }: { errors: FormErrors }) {
 function Output({ infos, errors }: { infos: FontInfo[]; errors: FormErrors }) {
   const form = useStore((s) => s.form);
   const setForm = useStore((s) => s.setForm);
+  const maxWorkers = useStore((s) => s.maxWorkers);
+  const setMaxWorkers = useStore((s) => s.setMaxWorkers);
   const variable = infos.filter((info) => info.variable);
   const cff2 = variable.some((info) => info.cff2);
   const truetype = variable.some((info) => !info.cff2);
@@ -517,7 +520,8 @@ function Output({ infos, errors }: { infos: FontInfo[]; errors: FormErrors }) {
   const instances = Math.max(...infos.map((info) => info.instances.length));
   const custom = form.styles.some((style) => style.name.trim() || Object.values(style.axes).some((v) => v.trim()));
   const several = form.styles.length > 1;
-  const changed = !form.formats.own || !form.formats.woff2 || !form.staticFonts || several || custom;
+  const changed =
+    !form.formats.own || !form.formats.woff2 || !form.staticFonts || several || custom || maxWorkers !== null;
   const setStyle = (row: number, change: Partial<Style>) =>
     setForm({ styles: form.styles.map((style, i) => (i === row ? { ...style, ...change } : style)) });
 
@@ -526,7 +530,10 @@ function Output({ infos, errors }: { infos: FontInfo[]; errors: FormErrors }) {
       title="Output"
       onReset={
         changed
-          ? () => setForm({ formats: emptyForm.formats, staticFonts: emptyForm.staticFonts, styles: emptyForm.styles })
+          ? () => {
+              setForm({ formats: emptyForm.formats, staticFonts: emptyForm.staticFonts, styles: emptyForm.styles });
+              setMaxWorkers(null);
+            }
           : undefined
       }
     >
@@ -638,7 +645,41 @@ function Output({ infos, errors }: { infos: FontInfo[]; errors: FormErrors }) {
           </p>
         </div>
       </More>
+      <Workers />
       <CliNote className="mt-1" />
     </Section>
+  );
+}
+
+function Workers() {
+  const maxWorkers = useStore((s) => s.maxWorkers);
+  const setMaxWorkers = useStore((s) => s.setMaxWorkers);
+  const items = [
+    { value: null, label: `Automatic (${automaticWorkers()})` },
+    ...Array.from({ length: mostWorkers() }, (_, i) => ({ value: i + 1, label: String(i + 1) })),
+  ];
+  return (
+    <More title="Workers" set={maxWorkers !== null}>
+      <Field className="gap-1.5">
+        <FieldLabel htmlFor="workers" className="w-full">
+          <FlagLabel text="Fonts built at the same time" flag="--jobs" />
+        </FieldLabel>
+        <Select items={items} value={maxWorkers} onValueChange={setMaxWorkers}>
+          <SelectTrigger id="workers" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {items.map((item) => (
+              <SelectItem key={item.label} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldDescription className="text-xs">
+          One worker builds one font at a time, and may use up to about 250 MB of memory.
+        </FieldDescription>
+      </Field>
+    </More>
   );
 }

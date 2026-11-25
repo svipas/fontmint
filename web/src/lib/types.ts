@@ -52,7 +52,19 @@ export type WebOptions = {
 export type Format = "ttf" | "otf" | "woff2";
 
 /** What prepare() planned for one font. */
-export type Plan = { paths: string[]; jobs: number; folder: string; entry: ReportEntry };
+export type Plan = {
+  paths: string[];
+  /** Files that are ready without a job. */
+  files: Files;
+  jobs: PlannedJob[];
+  /** The variable fonts the jobs start from. */
+  sources: Uint8Array[];
+  folder: string;
+  entry: ReportEntry;
+};
+
+/** One output still to build: a job for Python, and the index of its font in `sources`. */
+export type PlannedJob = { job: Uint8Array; source: number };
 
 /** One font's part of the report (report.Entry), handed back to Python as it is. */
 export type ReportEntry = Record<string, unknown>;
@@ -62,8 +74,6 @@ export type BuildEvent =
   | {
       type: "job";
       font: string;
-      done: number;
-      total: number;
       style: string;
       seconds: number;
       /** Its axis values as text, e.g. "wght 375" or "wght 300–700". */

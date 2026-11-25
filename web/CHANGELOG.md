@@ -8,6 +8,10 @@ What changed on [svipas.github.io/fontmint](https://svipas.github.io/fontmint), 
 - Dropped files that aren't fonts (a license, a readme) are skipped instead of blocking the build.
 - The command for the command line works in the Windows Command Prompt too: names are in double quotes.
 - Custom-range variable fonts get the same file names as from the command line when several axes are set.
+- Much faster builds of variable fonts: several styles are built at the same time instead of one after another (Inter: about 12 seconds instead of 40 on an 8-core Mac).
+- Pick how many fonts are built at the same time (Output → Workers); your browser remembers it.
+- On phones, a long file name no longer pushes the Download button past the edge of its card.
+- Freezing and renaming a variable font takes a moment instead of several seconds.
 
 ## 0.2.0
 

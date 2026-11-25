@@ -7,6 +7,8 @@ What changed in fontmint's command line and library, per version. The website ha
 - Every build comes with a `fontmint.txt` in its folder: what it was made from, what was changed, and the command that makes it again.
 - Files that aren't fonts are skipped instead of stopping the run, so `fontmint folder/*` works next to a license or a readme. A damaged font still stops it.
 - The file name of a custom-range variable font no longer depends on the order its axes were given in (`--axis` options, or `axes` in the library).
+- Faster builds of variable fonts: the variable WOFF2 is compressed alongside the static fonts instead of before them.
+- Library: `prepare()` leaves the variable WOFF2 to a job (`mint()` still returns everything), and `check=False` skips looking for damage in a font that `inspect()` has read.
 
 ## 0.1.0
 

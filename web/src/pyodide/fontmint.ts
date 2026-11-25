@@ -24,11 +24,11 @@ type ReadFile = (path: string) => Promise<Uint8Array>;
 export type Fontmint = {
   manifest: Manifest;
   describe(name: string, font: Uint8Array): FontInfo;
-  /** Plans one font, kept by its file name until build(name). */
+  /** Plans one font that describe() has read; any worker can run its jobs. */
   prepare(name: string, font: Uint8Array, options: WebOptions, report: (event: BuildEvent) => void): Plan;
   /** Throws if two inputs (each one's prepare() paths) would write the same file. */
   checkClashes(outputs: string[][]): void;
-  build(name: string, report: (event: BuildEvent) => void): Files;
+  runJob(name: string, job: Uint8Array, source: Uint8Array, report: (event: BuildEvent) => void): Files;
   zipFiles(files: Files, entries: ReportEntry[], report: (event: BuildEvent) => void): Uint8Array;
 };
 
@@ -88,7 +88,7 @@ function wrap(pyodide: PyodideAPI, web: PyProxy & Record<string, Function>, mani
       const pyOutputs = pyodide.toPy(outputs);
       call(() => web.check_clashes!(pyOutputs), pyOutputs);
     },
-    build: (name, report) => call(() => web.build!(name, reporter(report))),
+    runJob: (name, job, source, report) => call(() => web.run_job!(name, job, source, reporter(report))),
     zipFiles: (files, entries, report) => {
       const pyFiles = pyodide.toPy(files);
       const pyEntries = pyodide.toPy(entries);

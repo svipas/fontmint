@@ -9,9 +9,6 @@ const bytes = () => new Uint8Array(1);
 test("compares the variable font when there is one", () => {
   const plan = {
     paths: ["A/variable/A[wght].ttf", "A/variable/A[wght].woff2", "A/static/A-Bold"],
-    jobs: 1,
-    folder: "A",
-    entry: {},
   };
   const files = {
     "A/variable/A[wght].ttf": bytes(),
@@ -22,7 +19,7 @@ test("compares the variable font when there is one", () => {
 });
 
 test("otherwise the first static font, at its axis values", () => {
-  const plan = { paths: ["A/static/A-Bold", "A/static/A-Black"], jobs: 2, folder: "A", entry: {} };
+  const plan = { paths: ["A/static/A-Bold", "A/static/A-Black"] };
   const files = { "A/woff2-unhinted/A-Bold.woff2": bytes(), "A/ttf-unhinted/A-Bold.ttf": bytes() };
   expect(pickOutput(plan, files, new Map([["A-Bold", { wght: 700 }]]))).toEqual({
     path: "A/ttf-unhinted/A-Bold.ttf",
@@ -30,8 +27,14 @@ test("otherwise the first static font, at its axis values", () => {
   });
 });
 
+test("never another input's font with the same name", () => {
+  const files = { "A/A-Regular.ttf": bytes(), "A/ttf-unhinted/A-Regular.ttf": bytes() };
+  expect(pickOutput({ paths: ["A/static/A-Regular"] }, files, new Map())?.path).toBe("A/ttf-unhinted/A-Regular.ttf");
+  expect(pickOutput({ paths: ["A/A-Regular.ttf"] }, files, new Map())?.path).toBe("A/A-Regular.ttf");
+});
+
 test("nothing to compare", () => {
-  expect(pickOutput({ paths: [], jobs: 0, folder: "A", entry: {} }, {}, new Map())).toBeNull();
+  expect(pickOutput({ paths: [] }, {}, new Map())).toBeNull();
 });
 
 test("each buffer is transferred once", () => {
@@ -39,6 +42,7 @@ test("each buffer is transferred once", () => {
   const files = { a: shared.subarray(0, 4), b: shared.subarray(4), c: bytes() };
   expect(transferables(files)).toHaveLength(2);
   expect(transferables(shared)).toEqual([shared.buffer]);
+  expect(transferables({ files, jobs: [{ job: bytes(), source: 0 }] })).toHaveLength(3);
   expect(transferables(null)).toEqual([]);
 });
 

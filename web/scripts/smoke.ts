@@ -22,7 +22,10 @@ try {
   const build = async (path: string, options: WebOptions): Promise<Files> => {
     const name = path.split("/").pop()!;
     plan = fontmint.prepare(name, await Bun.file(path).bytes(), options, ignore);
-    return fontmint.build(name, ignore);
+    const files = { ...plan.files };
+    for (const { job, source } of plan.jobs)
+      Object.assign(files, fontmint.runJob(name, job, plan.sources[source]!, ignore));
+    return files;
   };
 
   const info = fontmint.describe("TestSans.ttf", await Bun.file(fonts.variable).bytes());

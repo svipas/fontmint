@@ -12,7 +12,7 @@ const print = (event: BuildEvent) =>
     event.type === "log"
       ? `  ${event.font}: ${event.text}`
       : event.type === "job"
-        ? `  ${event.font}: ${event.done}/${event.total} ${event.style} · ${event.seconds}s`
+        ? `  ${event.font}: ${event.style} · ${event.seconds}s`
         : `  ${event.path}`,
   );
 
@@ -31,8 +31,13 @@ for (const path of paths) {
   console.log(
     `${basename(path)}: ${info.family}, ${info.variable ? "variable" : "static"}, ${info.features.length} features`,
   );
-  entries.push(fontmint.prepare(basename(path), font, JSON.parse(optionsJson), print).entry);
-  Object.assign(files, fontmint.build(basename(path), print));
+  const prepareStarted = performance.now();
+  const plan = fontmint.prepare(basename(path), font, JSON.parse(optionsJson), print);
+  console.log(`  prepared in ${seconds(prepareStarted)}`);
+  entries.push(plan.entry);
+  Object.assign(files, plan.files);
+  for (const { job, source } of plan.jobs)
+    Object.assign(files, fontmint.runJob(basename(path), job, plan.sources[source]!, print));
 }
 const zip = fontmint.zipFiles(files, entries, print);
 const out = join(dirname(paths[0] ?? "."), "fontmint-bench.zip");

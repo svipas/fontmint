@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import cast
 
 from fontTools.ttLib import TTFont
@@ -181,7 +181,8 @@ class FontInfo:
 @dataclass
 class Job:
     """One output built from a variable font. Picklable, so it can run in a
-    worker process. kind="static" pins every axis; kind="variable" sets custom axis ranges."""
+    worker process. kind="static" pins every axis; kind="variable" sets custom axis ranges,
+    or none: without a location it's the WOFF2 of the whole variable font."""
 
     kind: str
     vf_bytes: bytes
@@ -200,6 +201,10 @@ class Job:
     @property
     def folder(self) -> str:
         return safe_path_part(self.family)
+
+    @property
+    def whole(self) -> bool:
+        return self.kind == "variable" and not self.location
 
 
 @dataclass
@@ -242,8 +247,9 @@ def inspect(font_bytes: bytes) -> FontInfo:
     )
 
 
-def prepare(font_bytes: bytes, options: Options) -> Prepared:
-    """Apply the options to one font, and plan everything to build from it."""
+def prepare(font_bytes: bytes, options: Options, check: bool = True) -> Prepared:
+    """Apply the options to one font, and plan everything to build from it. check=False
+    skips looking for damage, for a font inspect() has read already."""
     options.validate()
     # __post_init__ turned these into text
     features, disable_text, subset_text = (cast(str, t) for t in (options.features, options.disable, options.subset))
@@ -251,7 +257,7 @@ def prepare(font_bytes: bytes, options: Options) -> Prepared:
     disable = parse_tags(disable_text)
     if both := sorted(set(spec) & set(disable)):
         raise FontmintError(f"{', '.join(both)} can't be frozen and disabled at the same time")
-    font = load(font_bytes, recalc=False)
+    font = load(font_bytes, recalc=False, check=check)
     variable = is_variable(font)
     old_family = family_name(font)
     warnings: list[str] = []
@@ -366,7 +372,7 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prep
     italic = is_italic(font)
     cff2 = "CFF2" in font
     vf_bytes = to_bytes(font)
-    job_args = {
+    job_args: dict = {
         "vf_bytes": vf_bytes,
         "family": family,
         "letter_spacing": options.letter_spacing,
@@ -395,7 +401,10 @@ def _prepare_variable_input(font, options, old_family, frozen, warnings) -> Prep
         if options.letter_spacing:  # the jobs add it themselves, to their instance
             add_letter_spacing(font, options.letter_spacing)
             vf_bytes = to_bytes(font)
-        files = _variable_files(vf_bytes, f"{folder}/variable/{stem}", formats, cff2)
+        files = _variable_files(vf_bytes, f"{folder}/variable/{stem}", formats - {"woff2"}, cff2)
+        if "woff2" in formats:  # a job of its own: compressing it can take longer than a static font
+            job = Job(kind="variable", stem=stem, location={}, **job_args)
+            jobs.insert(0, replace(job, vf_bytes=vf_bytes, letter_spacing=0, formats={"woff2"}))
 
     own = "otf" if cff2 else "ttf"
     if not formats & {own, "woff2"}:
@@ -512,21 +521,27 @@ def _variable_files(data: bytes, base: str, formats: set[str], cff2: bool) -> di
 
 def build_job(job: Job) -> dict[str, bytes]:
     """Run one job. Returns {relative path: bytes}."""
-    font = instantiateVariableFont(load(job.vf_bytes, check=False), job.location, inplace=True)
+    font = load(job.vf_bytes, check=False)
+    if job.whole:
+        return _variable_files(job.vf_bytes, f"{job.folder}/variable/{job.stem}", job.formats, "CFF2" in font)
+    font = instantiateVariableFont(font, job.location, inplace=True)
     add_letter_spacing(font, job.letter_spacing)
     if job.kind == "variable":
         return _variable_files(to_bytes(font), f"{job.folder}/variable/{job.stem}", job.formats, "CFF2" in font)
 
     stem = set_static_names(font, job.family, job.style, job.weight_class, job.width_class)
     mark_monospaced(font)
+    wants_hinted = job.hint and bool({"ttf", "woff2"} & job.formats)
+    if not wants_hinted:
+        strip_hinting(font)
     # Each output starts from these bytes: a font loaded from bytes copies the tables
     # it doesn't touch instead of compiling them again (GSUB/GPOS take seconds).
     data = to_bytes(font)
-    unhinted = to_bytes(strip_hinting(load(data, check=False)))
+    unhinted = to_bytes(strip_hinting(load(data, check=False))) if wants_hinted else data
     # A hinted source keeps the designer's hints (adjusted to the instance by the
     # instancer); ttfautohint is only used for sources without hinting.
     hinted = None
-    if job.hint and {"ttf", "woff2"} & job.formats:
+    if wants_hinted:
         hinted = data if has_hinting(font) else autohint(unhinted)
 
     files = {}
@@ -559,7 +574,10 @@ def mark_monospaced(font: TTFont) -> None:
 
 def output_paths(prepared: Prepared) -> list[str]:
     """Every path `prepared` will produce (before building), for collision checks."""
-    return [*prepared.files, *(f"{job.folder}/{job.kind}/{job.stem}" for job in prepared.jobs)]
+    return [
+        *prepared.files,
+        *(f"{job.folder}/{job.kind}/{job.stem}{'.woff2' if job.whole else ''}" for job in prepared.jobs),
+    ]
 
 
 def check_clashes(outputs: list[list[str]]) -> None:

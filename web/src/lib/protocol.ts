@@ -7,7 +7,7 @@ export type Calls = {
   describe: { args: { name: string; font: Uint8Array }; result: FontInfo };
   prepare: { args: { name: string; font: Uint8Array; options: WebOptions }; result: Plan };
   checkClashes: { args: { outputs: string[][] }; result: null };
-  build: { args: { name: string }; result: Files };
+  runJob: { args: { name: string; job: Uint8Array; source: Uint8Array }; result: Files };
   zip: { args: { files: Files; entries: ReportEntry[] }; result: Uint8Array };
 };
 
@@ -25,13 +25,13 @@ export type FromWorker =
   /** The worker can't go on (Pyodide failed outside any call): every waiting call fails. */
   | { type: "crash"; message: string };
 
-/** Every distinct buffer under `value` (a Uint8Array, or a Files object), to transfer instead of copy. */
+/** Every distinct buffer under `value`, to transfer instead of copy. */
 export function transferables(value: unknown): ArrayBuffer[] {
-  const arrays =
-    value instanceof Uint8Array
-      ? [value]
-      : value && typeof value === "object"
-        ? Object.values(value).filter((v) => v instanceof Uint8Array)
-        : [];
-  return [...new Set(arrays.map((a) => a.buffer as ArrayBuffer))];
+  const buffers = new Set<ArrayBuffer>();
+  const visit = (item: unknown) => {
+    if (item instanceof Uint8Array) buffers.add(item.buffer as ArrayBuffer);
+    else if (item && typeof item === "object") Object.values(item).forEach(visit);
+  };
+  visit(value);
+  return [...buffers];
 }

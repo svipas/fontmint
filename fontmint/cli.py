@@ -349,7 +349,7 @@ def run(args: argparse.Namespace) -> None:
                     files |= fut.result()
                 except Exception as e:  # FontmintError or a library error inside a worker
                     pool.shutdown(wait=False, cancel_futures=True)
-                    raise FontmintError(f"{path.name}: {job.stem}: {e}") from e
+                    raise FontmintError(f"{path.name}: {job.stem}: {str(e) or type(e).__name__}") from e
 
     made_with = f"fontmint {__version__} (https://github.com/svipas/fontmint)"
     reports = report.render(entries, files, made_with)

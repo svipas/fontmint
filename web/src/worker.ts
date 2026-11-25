@@ -24,7 +24,7 @@ self.addEventListener("message", async ({ data }: MessageEvent<ToWorker>) => {
     else if (data.call === "describe") value = fm.describe(data.name, data.font);
     else if (data.call === "prepare") value = fm.prepare(data.name, data.font, data.options, report);
     else if (data.call === "checkClashes") value = fm.checkClashes(data.outputs) ?? null;
-    else if (data.call === "build") value = fm.build(data.name, report);
+    else if (data.call === "runJob") value = fm.runJob(data.name, data.job, data.source, report);
     else value = fm.zipFiles(data.files, data.entries, report);
     post({ type: "result", id: data.id, value }, transferables(value));
   } catch (error) {

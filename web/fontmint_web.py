@@ -1,11 +1,11 @@
 """fontmint in the browser: the only module the page's workers call.
 
 Values in and out are plain dicts, lists, strings and bytes, which Pyodide converts to
-and from JavaScript. A worker can handle several input fonts, each by its file name:
-prepare() keeps a font's plan, build() runs it. Progress goes to `report` as small dicts:
+and from JavaScript. Nothing is kept between calls: prepare() returns a font's jobs, and any
+worker can run each of them with run_job(). Progress goes to `report` as small dicts:
 
     {"type": "log", "font": "Inter.ttf", "text": "froze ss02: 412 characters remapped", "warning": False}
-    {"type": "job", "font": "Inter.ttf", "done": 4, "total": 9, "style": "InterClear-Medium", "seconds": 5.1,
+    {"type": "job", "font": "Inter.ttf", "style": "InterClear-Medium", "seconds": 5.1,
      "where": "opsz 14, wght 500", "location": {"opsz": 14, "wght": 500}}   # location: static fonts only
     {"type": "file", "path": "InterClear/ttf-unhinted/InterClear-Medium.ttf"}
 
@@ -17,6 +17,7 @@ the CLI's). Tested on desktop Python in tests/test_web.py.
 from __future__ import annotations
 
 import io
+import pickle
 import time
 import zipfile
 from collections.abc import Callable, Mapping
@@ -30,11 +31,9 @@ from fontmint.features import changed_characters
 from fontmint.report import Entry, log_lines, make_entry
 from fontmint.report import render as render_report
 
-__all__ = ["build", "check_clashes", "describe", "prepare", "zip_files"]
+__all__ = ["check_clashes", "describe", "prepare", "run_job", "zip_files"]
 
 Report = Callable[[dict], None]
-
-_prepared: dict[str, Prepared] = {}  # file name → plan, for this worker's fonts
 
 
 def describe(name: str, font_bytes: bytes) -> dict:
@@ -74,9 +73,13 @@ def web_options(options: dict, variable: bool, cff2: bool) -> Options:
 
 
 def prepare(name: str, font_bytes: bytes, options: dict, report: Report) -> dict:
-    """Freeze, rename and plan one font. Returns the paths it will produce (for
-    check_clashes() across all inputs before anything is built), the number of jobs
-    build() will run, the output folder, and the font's part of the report for zip_files().
+    """Freeze, rename and plan one font that describe() has read. Returns the paths it will
+    produce (for check_clashes() across all inputs before anything is built), the files that
+    are ready, the jobs for run_job(), the output folder, and the font's part of the report
+    for zip_files().
+
+    Each job comes as {"job": …, "source": …}: an opaque value, and the index in "sources"
+    of the variable font it starts from (all jobs share one or two of those).
 
     `options["styles"]`, a list of {"axes": …, "style_name": …}, plans several builds of
     the font as one - the way to name more than one static font (375 as Regular and 675
@@ -87,10 +90,9 @@ def prepare(name: str, font_bytes: bytes, options: dict, report: Report) -> dict
     try:
         font = load(data, check=False)
         all_opts = [web_options({**options, **style}, "fvar" in font, "CFF2" in font) for style in styles]
-        prepared = _merge([prepare_font(data, opts) for opts in all_opts])
+        prepared = _merge([prepare_font(data, opts, check=False) for opts in all_opts])
     except FontmintError as e:
         raise FontmintError(f"{name}: {e}") from e
-    _prepared[name] = prepared
 
     def log(text: str, warning: bool = False) -> None:
         report({"type": "log", "font": name, "text": text, "warning": warning})
@@ -99,9 +101,16 @@ def prepare(name: str, font_bytes: bytes, options: dict, report: Report) -> dict
         log(line)
     for warning in prepared.warnings:
         log(f"warning: {warning}", warning=True)
+    sources = list(dict.fromkeys(job.vf_bytes for job in prepared.jobs))
     return {
         "paths": output_paths(prepared),
-        "jobs": len(prepared.jobs),
+        "files": prepared.files,
+        "jobs": [
+            # Pickled: as plain values, JavaScript would turn a job's tuples and sets into arrays.
+            {"job": pickle.dumps(replace(job, vf_bytes=b"")), "source": sources.index(job.vf_bytes)}
+            for job in prepared.jobs
+        ],
+        "sources": sources,
         "folder": prepared.folder,
         "entry": asdict(make_entry(name, data, all_opts, prepared)),
     }
@@ -124,28 +133,26 @@ def _merge(plans: list[Prepared]) -> Prepared:
     )
 
 
-def build(name: str, report: Report) -> dict[str, bytes]:
-    """Build every file of a prepared font, reporting each finished job."""
-    prepared = _prepared.pop(name)
-    files = dict(prepared.files)
-    for done, job in enumerate(prepared.jobs, 1):
-        started = time.perf_counter()
-        try:
-            files |= build_job(job)
-        except Exception as e:  # FontmintError or a library error
-            raise FontmintError(f"{name}: {job.stem}: {e}") from e
-        event = {
-            "type": "job",
-            "font": name,
-            "done": done,
-            "total": len(prepared.jobs),
-            "style": job.stem,
-            "seconds": round(time.perf_counter() - started, 1),
-            "where": _where(job.location),
-        }
-        if job.kind == "static":
-            event["location"] = dict(job.location)
-        report(event)
+def run_job(name: str, job_bytes: bytes, source: bytes, report: Report) -> dict[str, bytes]:
+    """Build one of prepare()'s jobs for the font in the file `name`, and report it."""
+    job = replace(pickle.loads(bytes(job_bytes)), vf_bytes=bytes(source))
+    started = time.perf_counter()
+    try:
+        files = build_job(job)
+    except MemoryError as e:
+        raise FontmintError(f"{name}: {job.stem}: out of memory; build with fewer workers") from e
+    except Exception as e:  # FontmintError or a library error
+        raise FontmintError(f"{name}: {job.stem}: {str(e) or type(e).__name__}") from e
+    event = {
+        "type": "job",
+        "font": name,
+        "style": job.stem,
+        "seconds": round(time.perf_counter() - started, 1),
+        "where": _where(job.location),
+    }
+    if job.kind == "static":
+        event["location"] = dict(job.location)
+    report(event)
     return files
 
 
